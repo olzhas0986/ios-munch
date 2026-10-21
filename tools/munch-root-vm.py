@@ -2,6 +2,8 @@
 """Build an HFS root inside an isolated Linux VM; no host mounts or device access."""
 import argparse
 import gzip
+import json
+import shlex
 import os
 from pathlib import Path
 import subprocess
@@ -25,6 +27,7 @@ def main():
     p.add_argument('archive', type=Path)
     p.add_argument('image', type=Path, help='existing blank HFS image file; never a device')
     p.add_argument('work', type=Path, help='new directory for initramfs and log')
+    p.add_argument('--repair-plan', type=Path, help='validated symlink-only repair for this local image')
     a = p.parse_args()
     runtime, archive, image = [x.resolve() for x in (a.runtime, a.archive, a.image)]
     assert image.is_file() and not image.is_symlink() and not str(image).startswith('/dev/')
@@ -55,9 +58,16 @@ def main():
         name = source.name.removesuffix('.gz')
         entries.append(('mods/' + name, 0o100644, gzip.decompress(source.read_bytes())))
         insmod.append('insmod /mods/' + name)
+    repair = ''
+    if a.repair_plan:
+        plan = json.loads(a.repair_plan.read_text())
+        for path in plan['remove_directories']:
+            assert path.startswith('System/Library/') and '..' not in Path(path).parts
+            target = shlex.quote('/target/' + path)
+            repair += f'if [ -d {target} ] && [ ! -L {target} ]; then rm -rf {target}; fi\n'
     init = '''#!/bin/sh
 /bin/busybox --install -s /bin
-fail() { echo MUNCH_ROOT_VM_FAILED; dmesg | tail -25; sync; poweroff -f; }
+fail() { echo MUNCH_ROOT_VM_FAILED; dmesg | tail -25; sync; umount /target 2>/dev/null || true; poweroff -f; }
 trap fail EXIT
 set -eu
 mount -t proc proc /proc
@@ -67,7 +77,7 @@ mount -t devtmpfs devtmpfs /dev
 sleep 2
 mount -t hfsplus -o force,rw /dev/vda /target
 echo MUNCH_ROOT_VM_EXTRACTING
-tar -xpf /dev/vdb -C /target
+''' + repair + '''tar -xpf /dev/vdb -C /target
 sync
 [ -s /target/sbin/launchd ]
 [ -s /target/usr/lib/dyld ]

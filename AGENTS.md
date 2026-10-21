@@ -22,4 +22,10 @@
   dual boot with a separate 16 GiB iosroot. This supersedes overwriting
   userdata for Munch. Collect actual Munch GPT/geometry and verify PC backups
   before proposing edits; upstream Sweet geometry must not be reused.
+- Latest Munch status (2026-10-21): the user explicitly waived the userdata
+  backup. The16GiB split and Data recreation are complete; Android boots.
+  XNU identifies iosroot read-only. Preserve Android and target only iosroot
+  for the requested on-device root installation. The prepared TWRP USB
+  installer requires no PC flashing and does not write GPT, userdata or boot.
+  Do not re-request the waived backup. See the active NOTES.md handoff.
 - Keep device dumps, serial numbers and downloaded Apple artifacts out of git.

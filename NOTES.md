@@ -2,6 +2,93 @@
 
 ## Local munch handoff — 2026-10-21
 
+USB INSTALLER0019 READY AND VERIFIED: research/munch/usb-install-0019.
+Three gzipparts5995844478bytes total, completefolder~6.13GB (fits16GBUSB).
+Raw16GiBHFS SHA2560755ecf46d7227dd1e5b7937d5b28bb92f40fe5498c64eb634a74ac63399f7bb.
+Boottestios.img125628416bytes SHA256b025ed90a42473ed4d3bc5db54c5941f4b500bd3c8b9a9a701f9b987318f9faa.
+Packer19759 exited0; all7SHA256SUMS pass7788. Fullcat3parts/gzipdecode into
+ACTUALinstallerC SHA256 helper43705 exited0,digestmatchesPythonmanifest for
+entire16GiB. Nativefsck/finalizedmatchingcleanheaders verified. No writes
+onphone yet. Install-Munch-iOS.zip createdsmallTWRPlauncher (SHA84063aa8...)
+pinsSHA256SUMS+install.sh, propagatespipelineerrors andshowsUIprogress.
+MockTWRP success/failingchild/tamperedscript/tamperedsums testsPASS. Generic
+packagerupdatedtoautomaticallymakeZIP in future; currentZIPmadeafterold
+runningpackerfinished. No rootrecompression needed. USBmountpath no longer
+needed; selectZIP inTWRPInstall fromcompletefolder. Priorquestionobsolete.
+Next user: copywholefoldertoUSB, TWRPInstallZIP, waitfullwrite/readbackPASS,
+thenRebootBootloader andtemporaryfastbootboot matchingincludedtestios.img.
+CapturefirstfullAppleuserspaceboot/photo; UI is NOT yetverified. Preserve
+0017/0018 checkpoints; Androidboot/userdata/GPT notchangedbyinstaller.
+See docs/MUNCH_INSTALL.md and MUNCH_XNU_0019.md. Needfinaldoc/sourcepublish.
+
+FULL ROOT VERIFIED / USB PACKAGING RUNNING: VMv4 failedbecauseprevious
+uncleanpoweroffforcedread-onlyHFS. Builtnativehostfsck_hfs fromexisting
+hfsprogs (removed -lbsd;modernglibc hasneededfunctions). fsck-fy corrected
+illegalUnicodecatalog names/cleanstate; thenVMv5 session84771 passedrepair
+of23shadowdirs and2584symlinks, verifiedcriticalhashes/mobileUID/tmp links,
+cleanumount. root-full-vm-5/console.log MUNCH_ROOT_VM_PASS. Nativefsck-fn
+root-fsck-final.log OK. BackupHFSvolumeheaderwasstaleafterLinuxlastupdate;
+newtools/munch-finalize-hfs.py verifiesFS-no-write, copiescleanprimary512B
+intoalternateheaderoflocal16GiBimage, fsync, verifiesagain. Logsroot-finalize-
+hfs/{before,after}.log bothOK, headersnowidentical. No userdata/devicewrites.
+USB packager session19759 RUNNING ->research/munch/usb-install-0019, currently
+10/16GiB packed (~5.5GiB compressed). DO NOTgiveuserincompletefolder; wait
+for packer0, thenSHA256SUMS andfullcatparts/gzipdecode/rawhash roundtrip.
+Command packer uses root-full-20H392.hfs,/tmp/munch-root-write-arm64,
+root-full-vm-5/console.log,munch-root-20H392-repaired.complete.json,--boot
+shim/out/munch-xnu-0019/testios.img. Targetcase-sensitivejournaled16GiB root;
+used11891724KiB,free4885492KiB. Newrootarchivefixture regression reproduced
+symlinkroot/cryptexchild scenario andchecksarchiveownership/cachehardlinks
+PASS. Kernel0019readyhashb025ed..., no fullrootphonebootyet.
+Needfinalpackageverification/docs/publication+userUSBcopy/installcommands.
+OTGmountpathquestionpending; usermayneedTWRPterminalifUSBportusedbyOTG.
+
+FULLROOT BUILD CRYPTEX CONFLICT FOUND/FIXING: VMv3 session13178 exited1,
+tar failed onSystem/Library/Frameworks/AuthenticationServices.framework:
+our alias-generation incorrectly added child entries beneath existing root
+framework symlinks, causing implicit directories. Allrealdata/hardlinks
+precede symlink phase, so primarydatafullycopied. Fixed archivegenerator:
+skip aliases underexistingSymlink ancestor, assertnoentriesundersymlinks
+beforewriting. ORIGINALmunch-root-20H392.tar HAS1997shadowentries; do not
+reuse it for fresh builds. Repairplanroot-symlink-repair.json validates
+shadowedentries contain NOcanonicaldata, only aliases/dirs;23conflictingroot
+framework/plugin dirs. Repairtarroot-symlink-repair.tar contains2584valid
+symlinks. VMtoolnew--repair-plan removes ONLY these localimageSystem/Library
+aliasdirs before applying symlinks. Current VMv4 session35018 writes same
+root-full-20H392.hfs fromrepairtar, logroot-full-vm-4/console.log. NeedPASS
+andcleanumount beforepackaging. Use munch-root-20H392-repaired.complete.json
+(322529expectedentries, canonicaldatabytesunchanged,3criticalhashes same).
+NativeinstallerSHA256readbacknowprints512MiBprogress; ARM64binaryrebuilt
+/tmp/munch-root-write-arm64, copiedresearch/munch/install-0019/munch-root-write.
+Packer nowrequires--boot matching0019/testios.img andincludesit onUSB.
+No physicalrootfswrites yet. MissingUSBmountpath userquestionpending.
+
+0019 KERNEL/BOOT READY, ROOT IMAGE STILL BUILDING: CI39645652041 success
+froma41cba6b, artifact12366798368, kernelSHA256
+87b77578d4fbdf0e7dee0609667973723e4fcc56015549ecc53d6e0666016e4e.
+Localboot0019 built using104MiBRAMpayloadunusedbecauseUFSrootselected:
+shim/out/munch-xnu-0019/testios.img,SHA256
+b025ed90a42473ed4d3bc5db54c5941f4b500bd3c8b9a9a701f9b987318f9faa.
+Loader's exactRAMprofile fixed1GiB->4GiB to match audited ADT; new hostharness
+research/munch/loader-host-0019.c compiled/tmp/munch-loader-host-0019 tests
+5prefixes/9malformedcases inclold1GiB profile rejection PASS. Bootv3roundtrip
+PASS. Previoustemporary0019hasha2d9...waspreloaderfix,doNOTuse.
+Added sanitized61staticD22productprops extracted officialIPSWDeviceTree
+CRCverified toignoredresearch/ipsw-x/d22ap.adt; mkmunchadt nowkeepsproduct.
+VMsession13178 stillrunning, console root-full-vm-3/console.log EXTRACTING,
+imageallocated~11GiB, noPASSyet. Do not package until guestunmount/PASS.
+Archive complete manifestmunch-root-20H392.complete.json verified324526
+entries,11524578512dataBytes,39513hardlinks,3criticalhashes.
+Newtools/munch-root-write.c staticARM64 nativewriter /tmp/munch-root-write-arm64
+copiedresearch/munch/install-0019/munch-root-write. HostSHA256vectors/GPT
+CRC+bounds/HFSheader tests PASS. Writesonlyfixed/dev/block/sda35,O_EXCL,
+checks16GiB/inputHFS/length/SHA,fsync andwholepartitionreadbackSHA. --check
+readsonly; --sha256 testhelper. No targetoverride. tools/munch-package-root.py
+requiresguestPASS/criticalhashes/cleanmatchingHFSheaders, gzip level3 into
+<=2GiBparts, generatedshell --check/--apply checksallpartSHA256beforewrite.
+Packagingnotrunyet. AskeduserforNTFSOTGmountpathviaadbmounts; pending.
+No fullroot/devicewrite or0019phoneboot yet. Filesneedscommit/publication.
+
 0019 PATCHES READY FOR CI:0085/86 reapply exactly over0018 baseline in
 fresh tempgit and reproduce reviewed sources. Actual write-function/final
 CDB-guard C harness passesbounds/readiness/permissions/bypass cases.

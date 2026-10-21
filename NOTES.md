@@ -2,6 +2,23 @@
 
 ## Local munch handoff — 2026-10-21
 
+ENGLISH HISTORY REWRITE COMPLETED: fork main replaced our aggregate commit
+d97a55a with f9289c65f238b31ed1c0bb8788b9837a43cf58e7, still directly
+parented by upstream4c7cc91. All32 added/modified text files are English;
+upstream history unchanged. Local branch aligned with a soft reset after
+verifying index/tree equality; private recovery branch
+backup/munch-before-english-20261021 retained, never publish it.
+FIRST XNU BOOT IMAGE READY: shim/out/munch-xnu-0005/testios.img,
+16424960bytes, SHA256
+2d2244af0c18b0d3214fd1945ccf3922e8a20d1530e9119f803f182bffdc2da8.
+See docs/MUNCH_XNU_0005.md. Uses verified early CI kernel, CPU0-only ADT,
+audited4..5GiB RAM and IRQ27. Boot-v3 prefix scanning/packed metadata handles
+possibly unaligned vendor ramdisk concatenation. No UFS/USB/input drivers.
+No root image yet: target is early kernel/no-root output, not iOS UI.
+Cross-build, boot roundtrip, native loader5-prefix/8-error scenarios and
+RAM audit negative cases pass. No XNU0005 physical boot yet.
+NEXT: user temporary fastboot boot and photo of the full early-XNU screen.
+
 USER PREFERENCE: all GitHub-facing content strictly English. Recorded in
 AGENTS.md. User subsequently requested rewriting our published changes:
 all ten munch documents translated, upstream history to remain unchanged.
@@ -11,9 +28,8 @@ kernel.development.sweet, 16923712 bytes. Downloaded artifact12332518950;
 SHA256 b391e0376f6ee6d790b263cee839241474c706b48159e12dbe51610fbc83a597
 verified against artifact SHA256SUMS. Local ignored path:
 research/munch/xnu-run-39572263994/kernel.development.sweet.
-Next: finish English history rewrite, prepare guarded boot-v3 XNU loader,
-package as testios.img with audited 4..5GiB CPU0-only ADT, and request a
-physical early-XNU screen. No XNU boot has been attempted yet.
+English rewrite and boot-v3 packaging are complete as described above.
+No physical XNU boot has been attempted yet.
 Published initial port tree to fork main as d97a55a01dc90d8cb78bcbc8d7447da45d05945b
 using GitHub Git API after git push DNS failed. Server tree matched local
 36003c3 exactly. Fetched that commit through a temporary bare clone and merged

@@ -15,9 +15,15 @@
 #define BOOT_LINE_LENGTH	608
 #define PAGE_16K		0x4000UL
 
+#ifdef MUNCH_XNU
+#define PAYLOAD_PACKED __attribute__((packed))
+#else
+#define PAYLOAD_PACKED
+#endif
+
 struct payload_seg {
 	uint64_t vmaddr, vmsize, file_off, file_size;
-};
+} PAYLOAD_PACKED;
 
 struct payload {
 	char magic[8];
@@ -26,7 +32,7 @@ struct payload {
 	uint64_t phys_base, mem_size;
 	char cmdline[BOOT_LINE_LENGTH];
 	struct payload_seg segs[];
-};
+} PAYLOAD_PACKED;
 
 /* pexpert/pexpert/arm64/boot.h, Revision/Version 2 */
 struct boot_video {
@@ -52,6 +58,16 @@ _Static_assert(sizeof(struct boot_args) == 736, "boot_args layout");
 /* MMU off: everything is Device memory, so copy in aligned 8-byte words. */
 static void copy64(uintptr_t dst, uintptr_t src, uint64_t n)
 {
+#ifdef MUNCH_XNU
+	/* Boot-v3 vendor ramdisk prefixes can leave the payload byte-aligned. */
+	if (src & 7) {
+		volatile uint8_t *d8 = (volatile uint8_t *)dst;
+		volatile const uint8_t *s8 = (volatile const uint8_t *)src;
+		for (uint64_t i = 0; i < n; i++) d8[i] = s8[i];
+		for (uint64_t i = n; i < ((n + 7) & ~7ULL); i++) d8[i] = 0;
+		return;
+	}
+#endif
 	volatile uint64_t *d = (volatile uint64_t *)dst;
 	volatile const uint64_t *s = (volatile const uint64_t *)src;
 	for (uint64_t i = 0; i < (n + 7) / 8; i++)
@@ -85,12 +101,49 @@ const char *loader_boot(uintptr_t dtb)
 		return "no initrd in /chosen";
 	con_hex2("INITRD", "lo=", rd_start, "hi=", rd_end);
 
+#ifdef MUNCH_XNU
+	if (rd_end < rd_start || rd_end - rd_start < sizeof(struct payload) ||
+	    rd_end - rd_start > 128ULL * 1024 * 1024)
+		return "invalid combined initrd size";
+	/* ABL may concatenate vendor ramdisk and the generic boot ramdisk. */
+	uint64_t original_start = rd_start;
+	while (rd_start <= rd_end - sizeof(struct payload) &&
+	       !magic_ok((const char *)rd_start)) rd_start++;
+	if (rd_start > rd_end - sizeof(struct payload)) return "payload not found in initrd";
+	con_hex("PREFIX", rd_start - original_start);
+#endif
 	const struct payload *p = (const struct payload *)rd_start;
 	if (!magic_ok(p->magic))
 		return "no SWEETXNU payload";
-	if (p->version != 1 || (p->adt_off & 7) || (rd_start & 7))
+	if (p->version != 1 || (p->adt_off & 7)
+#ifndef MUNCH_XNU
+	    || (rd_start & 7)
+#endif
+	    )
 		return "bad payload header";
 
+#ifdef MUNCH_XNU
+	/* Validate every source/destination before copying anything to upper DDR. */
+	uint64_t length = rd_end - rd_start;
+	if (!p->nsegs || p->nsegs > 32 || sizeof(*p) + p->nsegs * sizeof(struct payload_seg) > length ||
+	    p->phys_base != 0x100000000ULL || p->mem_size != 0x40000000ULL ||
+	    !p->adt_size || p->adt_size > 1024 * 1024 || p->adt_off > length ||
+	    p->adt_size > length - p->adt_off || p->kernel_end < p->virt_base ||
+	    p->entry_va < p->virt_base || p->entry_va >= p->kernel_end)
+		return "payload bounds/profile mismatch";
+	uint64_t used = p->kernel_end - p->virt_base;
+	if (used > p->mem_size || p->adt_size + 2 * PAGE_16K > p->mem_size - used ||
+	    (p->kernel_end & (PAGE_16K - 1)))
+		return "kernel/ADT outside RAM aperture";
+	for (uint32_t i = 0; i < p->nsegs; i++) {
+		const struct payload_seg *s = &p->segs[i];
+		if (s->vmaddr < p->virt_base || s->vmaddr - p->virt_base > used ||
+		    s->vmsize > used - (s->vmaddr - p->virt_base) || (s->vmaddr & 7) ||
+		    (s->vmsize & 7) || s->file_size > s->vmsize ||
+		    s->file_off > length || s->file_size > length - s->file_off)
+			return "segment outside payload/RAM";
+	}
+#endif
 	uint64_t pa_of_va_base = p->phys_base - p->virt_base;	/* pa = va + this */
 	con_hex2("PHYS", "base=", p->phys_base, "size=", p->mem_size);
 	con_hex("VIRT", p->virt_base);

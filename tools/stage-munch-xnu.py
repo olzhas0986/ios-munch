@@ -8,8 +8,8 @@ import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
-LAST = 82
-PATCH_NUMBERS = tuple(range(1, 28)) + (32, 82)  # SHA-1 and console labels; skip UFS/write patches.
+LAST = 83
+PATCH_NUMBERS = tuple(range(1, 28)) + (32, 82, 83)  # SHA-1 and console labels; skip UFS/write patches.
 
 
 def main():

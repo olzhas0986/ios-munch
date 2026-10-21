@@ -2,6 +2,15 @@
 
 ## Local munch handoff — 2026-10-21
 
+GRAPHICS CI FIRST FAILURE: run39612721389 failed compiling framebuffer:
+log-renaming regex matched a quote in a comment and renamed references
+without matching macro definitions. Corrected all framebuffer macro names;
+verified source/header macro reference coverage. No hardware impact.
+Dynamic graphics probe prepared: true dyld-bound IOKit/IOSurface calls,
+12 imports, native geometry validation, draws small lower-screen bands.
+Root prepared at shim/out/munch-init-0016/root.hfs using successful launchd
+userland baseline, no syslog job. Pending corrected CI and image packaging.
+
 MUNCH GRAPHICS PREPARATION: prioritized actual iOS display path over syslog.
 Added0083 from upstream0046 portable IOSurface/IOMobileFramebuffer sources,
 integrated independently of AKS/watchdog/UFS. New runtime messages MUNCH,

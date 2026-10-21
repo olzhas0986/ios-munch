@@ -22,7 +22,10 @@ def main():
     parser.add_argument("--accounts", type=Path, help="restore master.passwd and group directory")
     parser.add_argument("--service", type=Path, help="launchd stability probe Mach-O")
     parser.add_argument("--syslog", action="store_true", help="Apple syslogd and local datagram test")
+    parser.add_argument("--graphics", type=Path, help="dynamic IOKit/IOSurface display probe")
     a = parser.parse_args()
+    if a.graphics:
+        assert a.launchd and a.accounts, "graphics probe requires launchd and accounts"
     if a.syslog:
         assert a.service, "syslog probe requires the service executable"
     if a.service:
@@ -152,6 +155,14 @@ def main():
                                                           'SockPathName': '/var/run/munch-syslog.sock', 'SockPathMode': 438}},
                            'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}
                     add_data('/System/Library/LaunchDaemons/com.apple.syslogd.plist', plistlib.dumps(job))
+                if a.graphics:
+                    data = a.graphics.read_bytes()
+                    assert struct.unpack_from('<II', data) == (0xfeedfacf, 0x100000c)
+                    add_data('/usr/libexec/munch-graphics', data, '555')
+                    job = {'Label': 'org.munch.graphics', 'ProgramArguments': ['/usr/libexec/munch-graphics'],
+                           'UserName': 'root', 'RunAtLoad': True,
+                           'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}
+                    add_data('/System/Library/LaunchDaemons/org.munch.graphics.plist', plistlib.dumps(job))
         header = image.read_bytes()[1024:1536]
         assert header[:2] == b'H+' and struct.unpack_from('>I', header, 40)[0] == 4096
         listing = edit('ls', '/sbin').stdout.decode()

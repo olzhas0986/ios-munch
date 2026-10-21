@@ -100,7 +100,7 @@ def build():
     mkadt.SWEET_ECID = 0x4d554e4348000001  # synthetic MUNCH, never a device ID
     mkadt.BOOT_MANIFEST_HASH = hashlib.sha384(b"munch early boot manifest").digest()
     root = mkadt.build()
-    root.children = [n for n in root.children if n.name not in ("product",)]
+    # Keep sanitized D22 product identity for Apple userspace.
     for child in root.children:
         if child.name == "sweet-ufs":
             setprop(child, "name", mkadt.cstr("munch-ufs"))

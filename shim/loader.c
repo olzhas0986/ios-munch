@@ -126,7 +126,7 @@ const char *loader_boot(uintptr_t dtb)
 	/* Validate every source/destination before copying anything to upper DDR. */
 	uint64_t length = rd_end - rd_start;
 	if (!p->nsegs || p->nsegs > 32 || sizeof(*p) + p->nsegs * sizeof(struct payload_seg) > length ||
-	    p->phys_base != 0x100000000ULL || p->mem_size != 0x40000000ULL ||
+	    p->phys_base != 0x100000000ULL || p->mem_size != 0x100000000ULL ||
 	    !p->adt_size || p->adt_size > 1024 * 1024 || p->adt_off > length ||
 	    p->adt_size > length - p->adt_off || p->kernel_end < p->virt_base ||
 	    p->entry_va < p->virt_base || p->entry_va >= p->kernel_end)

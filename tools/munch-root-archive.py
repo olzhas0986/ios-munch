@@ -63,6 +63,18 @@ def main():
                         dest = candidate
                     break
         if dest and dest not in entries:
+            # A root framework symlink already exposes its cryptex subtree.
+            # Adding children below it would implicitly create a conflicting directory.
+            ancestor = Path(dest).parent
+            blocked = False
+            while str(ancestor) not in ('.', '/'):
+                record = entries.get(str(ancestor))
+                if record and stat.S_ISLNK(record['mode']):
+                    blocked = True
+                    break
+                ancestor = ancestor.parent
+            if blocked:
+                continue
             parents(dest)
             alias = copy.copy(r)
             alias['path'] = dest
@@ -135,6 +147,12 @@ def main():
         group = 0 if stat.S_ISDIR(mode) else 1 if stat.S_ISREG(mode) and not r['link'] else 2 if stat.S_ISREG(mode) else 3
         return group, r['path'].count('/'), r['path']
 
+    for path in entries:
+        parent = Path(path).parent
+        while str(parent) not in ('.', '/'):
+            record = entries.get(str(parent))
+            assert not record or not stat.S_ISLNK(record['mode']), ('entry below symlink', path, str(parent))
+            parent = parent.parent
     assert not a.output.exists(), 'refusing to overwrite archive'
     count = payload = 0
     partial = a.output.with_suffix(a.output.suffix + '.partial')

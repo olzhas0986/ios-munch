@@ -1,0 +1,134 @@
+name: Munch - early XNU
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner (macos-14 retires November 2, 2026)
+        type: choice
+        options: [macos-14, macos-15]
+        default: macos-14
+  push:
+    branches: [main, munch-bringup]
+    paths:
+      - .github/workflows/munch-xnu.yml
+      - tools/stage-munch-xnu.py
+      - tools/iig-cached.py
+      - xnu/munch/**
+      - xnu/patches/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: munch-early-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DXB_REPO: https://github.com/blacktop/darwin-xnu-build
+  DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
+  MACOS_VERSION: '13.5'
+  KERNEL_CONFIG: DEVELOPMENT
+  # Reuse the generic non-Apple ARM configuration; hardware ADT is prepared locally.
+  MACHINE_CONFIG: SWEET
+  IIG: ${{ github.workspace }}/tools/iig-cached.py
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner || 'macos-14' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned build scripts and select early patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q dxb
+          git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
+          git -C dxb checkout -q FETCH_HEAD
+          test "$(git -C dxb rev-parse HEAD)" = "$DXB_SHA"
+          python3 tools/stage-munch-xnu.py dxb
+          chmod +x tools/iig-cached.py
+          "$IIG" --version
+          cat dxb/munch-patches.json
+
+      - name: Select Xcode and install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install jq gum bash cmake ninja
+          # The pinned script checks for xcodes, though Xcode is preinstalled.
+          printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
+          sudo chmod +x /usr/local/bin/xcodes
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
+          test -n "$XC"
+          echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
+          sudo xcode-select -s "$XC"
+          sw_vers
+          xcodebuild -version
+
+      - name: Build early XNU
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dxb
+          bash build.sh 2>&1 | tee ../munch-build.log
+
+      - name: Validate and collect kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e dxb/xnu/bsd/dev/sweet_ufs.c
+          mkdir -p out
+          cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet out/
+          cp dxb/munch-patches.json out/
+          cp xnu/munch/iig-8796.json out/iig-provenance.json
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          p = Path('out/kernel.development.sweet')
+          magic, cpu, subtype = struct.unpack_from('<III', p.read_bytes())
+          assert magic == 0xfeedfacf and cpu == 0x0100000c
+          assert (subtype & 0xffffff) in (0, 1), 'expected plain arm64, not arm64e'
+          print('Verified arm64 Mach-O:', p)
+          PY
+          (cd out && shasum -a 256 kernel.development.sweet > SHA256SUMS)
+
+      - name: Package source and generated headers for local checks
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -d dxb/xnu; then
+            paths=(xnu)
+            for p in build/xnu.obj fakeroot/usr/local/include; do
+              if test -d "dxb/$p"; then paths+=("$p"); fi
+            done
+            tar czf munch-buildtree.tgz --exclude='*.o' --exclude='*.cpo' \
+              --exclude='*.a' --exclude='*.dSYM' --exclude='*.unstripped' \
+              --exclude='kernel.development.*' --exclude='.git' -C dxb "${paths[@]}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: munch-xnu-early
+          path: out/
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: munch-xnu-build-log
+          path: munch-build.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: munch-xnu-buildtree
+          path: munch-buildtree.tgz
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,5 +1,145 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## Local munch handoff — 2026-10-21
+
+USER PREFERENCE: all GitHub-facing content strictly English. Recorded in
+AGENTS.md. User subsequently requested rewriting our published changes:
+all ten munch documents translated, upstream history to remain unchanged.
+Our commit subjects were already English; the content required translation.
+EARLY KERNEL BUILD SUCCEEDED: Actions run39572263994 produced plain ARM64
+kernel.development.sweet, 16923712 bytes. Downloaded artifact12332518950;
+SHA256 b391e0376f6ee6d790b263cee839241474c706b48159e12dbe51610fbc83a597
+verified against artifact SHA256SUMS. Local ignored path:
+research/munch/xnu-run-39572263994/kernel.development.sweet.
+Next: finish English history rewrite, prepare guarded boot-v3 XNU loader,
+package as testios.img with audited 4..5GiB CPU0-only ADT, and request a
+physical early-XNU screen. No XNU boot has been attempted yet.
+Published initial port tree to fork main as d97a55a01dc90d8cb78bcbc8d7447da45d05945b
+using GitHub Git API after git push DNS failed. Server tree matched local
+36003c3 exactly. Fetched that commit through a temporary bare clone and merged
+it locally (d88a20f), preserving both histories. No force updates used.
+First Actions run: https://github.com/olzhas0986/ios-munch/actions/runs/39572263994
+Job 119129105447. Fetch/staging and Xcode/dependencies succeeded; inspect
+current API job status before assuming the kernel build outcome.
+Prepared tools/mkmunchadt.py:
+audits live FDT DDR, 28 fixed reservations and 12 dynamic pools, selects
+4..5GiB (no overlap; dynamic pools constrained below4GiB), CPU0/IRQ27/no UFS.
+Generated ignored research/munch/munch-early.adt and checked roundtrip.
+
+GitHub update: user created public fork https://github.com/olzhas0986/ios-munch
+(main at upstream 4c7cc91 when inspected). Local remote `munch` added.
+Git credential helper reports a usable credential (never print it).
+Prepared `.github/workflows/munch-xnu.yml`: pinned dxb, only patches1..27,
+no UFS/USB/input drivers, fail closed on numbered patch application errors,
+plain-arm64 artifact check, logs/buildtree artifacts. See MUNCH_ACTIONS.md.
+Current macos-14 image lists Xcode16.2, so added a self-contained 34-file
+IIG DriverKit-286 generated-source snapshot with 17 pinned input hashes,
+not a new IORPC ABI or an executable generator. Apple license preserved.
+All source hashes match pristine xnu-8796.141.3; selected27 patches apply,
+IIG replay/changed-input rejection, YAML/shell syntax and repo checks pass.
+Full macOS build subsequently passed in run39572263994 above;
+kernel artifact alone is NOT a testios.img and cannot be booted directly.
+
+LATEST HARDWARE PASS: `../WIN_20261021_13_23_59_Pro.jpg` shows DIAG0004
+`SMP START STOP PASS`; all CPU1..7 on=0, OFF=1, asm=4, correct ctx,
+EL1/ready=1/MMFR0=0x101122. CPU4..7 MIDR=0x411fd0d0. Prior CPU5 pending
+not reproduced with held cores + longer entry timeout; exact cause unknown.
+Hardware prerequisites now confirmed: splash, CPU0 16K MMU/local IRQ,
+basic PSCI entry/off on all cores. Next: single-CPU EARLY XNU (not another
+SMP diagnostic); see `docs/MUNCH_XNU_NEXT.md` for build/driver boundaries.
+GitHub account/fork now supplied; build access preparation above.
+No XNU artifact built for munch yet.
+User explicitly requests removal of unnecessary junk. Removed 115 derived/
+corrupt/metadata items (80.7 MiB); preserved all stock images, kernel ZIP,
+valid raw diagnostics/photos and testios.img + diag.elf for 0001..4.
+Cleanup ledger ignored at `research/munch/cleanup-20261021.json`.
+Do not assume old object/unpacked/header/disassembly paths still exist;
+rebuild/re-extract if needed. Original inputs and harness/configs retained.
+
+Earlier PHOTO RESULT: `../WIN_20261021_13_14_45_Pro.jpg` shows DIAG0003:
+PSCI1.1; CPU1..4 on=0, final OFF=1, ready=1. CPU4 MIDR 0x411fd0d0.
+CPU5 on=0 but state=ON_PENDING(2), ready=0 within ~500ms; CPU6/7 untested.
+No cause established. See `docs/MUNCH_DIAG_0004.md`.
+Built DIAG0004 (new default),
+`shim/out/munch-diag-0004/testios.img`, 90112 bytes, SHA256
+`4d81cd8cb6f9d24f434b2f74837fb7a42f38b02477560ae513fed2828aea1712`.
+Adds entry-stage records before SP/C; keeps CPUs resident until all seven
+CPU_ON attempts, then release_all+SEV -> CPU_OFF. 2s per entry + 2s cleanup.
+No GIC/MMU/storage/clock/voltage programming. 0001..3 hashes unchanged.
+Cross-build, boot roundtrip, stage disassembly/static layouts and native
+success/12-error scenarios pass; physical PASS above.
+
+Previous hardware result: user confirms DIAG0002 `MMU IRQ TESTS PASS`:
+VTIMER27=0x1e, PTIMER30=0x1e, SGI1=0x0a, other=0 for all.
+CPU0 16K MMU and local Group1 IRQ now physically confirmed.
+Previous DIAG0003 image:
+`shim/out/munch-diag-0003/testios.img` (90112 bytes), SHA256
+`d44d0b64d30ee110d88ba888469136654c3f582fdfd6dd3cc0b157ba37844d51`.
+Sequential PSCI CPU1..7 entry/register capture/CPU_OFF, all caches/MMU off;
+checks target initially OFF and final OFF. No GIC/storage/XNU in 0003.
+Read `docs/MUNCH_DIAG_0003.md`. Cross-build, unpack roundtrip, native mocked
+control-flow cases and old-image hash regression pass. Hardware result above.
+
+Earlier physical result: user reports `MUNCH DIAG 0001` and
+`STATUS CPU0 C ENTRY OK` on the phone. CPU0 C entry and visible splash
+writes confirmed; no explicit DSI trigger needed for this test. User has
+supplied register transcription; exact text in
+`docs/MUNCH_DIAG_0002.md`. EL1, MIDR 0x51df805e, MPIDR 0x81000000,
+MMFR0 0x101122, timer 19.2 MHz. SCTLR transcription may be incomplete.
+User preference: ALL subsequent boot images must be named `testios.img`;
+keep test versions in directory names and screen text. Builder updated;
+0001 remains at `shim/out/munch-diag-0001/testios.img` (same bytes/hash).
+Previous image 0002, `shim/out/munch-diag-0002/testios.img` (163840 bytes),
+SHA256 `23d8041bb599d7f77cf232bc34b93155940937231c5968ead464b3e39afe494b`.
+Explicit 0001/0002 still reproduce original images.
+0002 uses existing shim/mmu.c (16K), plus own Group1 CPU0 IRQ probe for
+vtimer27, ptimer30 and 10 self-SGI1; no UFS/XNU/PSCI/secondary CPUs.
+Cross-build, boot roundtrip, real-C MMU table construction host harness
+and 0001 regression pass. QEMU absent; hardware PASS received above.
+
+This checkout starts a POCO F4 port on branch `munch-bringup`, based on
+upstream `4c7cc91`. Read `MUNCH.md` for current scope and next steps.
+Stock images are now available at `../extracted_20261021_115709/`.
+See `docs/MUNCH_STOCK.md` for verified offline findings and input hashes.
+Unpacked boot/vendor_boot v3 and 31 device trees to ignored
+`research/munch/stock/`; overlay 21 identifies munch, board-id 0x32.
+Overlay 21 applies to base-00 (candidate only); RAM reg remains zero.
+DT virtual timer is INTID 27, unlike sweet's 19; touch is FocalTech SPI.
+User confirms unlocked bootloader and TWRP; WSL adb does not work.
+The original no-hardware-validation state is superseded by 0001 above.
+`tools/munch-collect.sh` collects read-only diagnostics from an explicitly
+selected munch over adb. Live DT has since been supplied from rooted Android.
+
+Live Android files subsequently supplied in parent workspace with root:
+valid `live.dtb`, nonzero `iomem.txt`, `input.txt`, late `dmesg.txt`, `dt.tar`.
+Read `docs/MUNCH_LIVE.md`; decompiled DT in ignored `research/munch/live/`.
+RAM banks differ from sweet; panel selected via bootargs is l11r command
+mode DSC; FocalTech SPI SE4 0x990000 confirmed. Current DTBO index 0 differs
+from stock bundle's munch index 21. This is explained by custom ZIP below.
+Small device-tree.tar is damaged.
+
+Custom kernel ZIP supplied and inspected: `docs/MUNCH_CUSTOM.md`.
+Extracted Image/DTB/DTBO/config to ignored `research/munch/custom/`.
+Linux 4.19.404R; one kona v2.1 base plus one munch overlay (index 0).
+Merge succeeds. DEBUG_FS and DRM_FBDEV_EMULATION are disabled, explaining
+missing diagnostic paths; do not ask user to mount debugfs or repeat fb0
+commands. Installer not executed. No device writes/boots performed.
+
+Milestone: stock kernel config extracted (Linux 4.19.157, DEBUG_FS and DRM
+fbdev emulation disabled too). Stock strings identify Qualcomm SDE cmd
+encoder/autorefresh path; no decompiled driver implementation yet.
+Built independent `shim/munch/` splash experiment, instructions/results in
+`docs/MUNCH_DIAG.md`. Boot v3 image at
+`shim/out/munch-diag-0001/munch-diag-0001.img` (86016 bytes), SHA256
+`5cde144e114e7cea0ad14a1caa4d3f42a7bc77ff2051133cf68ab0954d9fc94a`.
+No UFS/XNU/DSI/MMU/PSCI/GIC in its link; fixed splash layout remains a
+hypothesis, guarded by board-id/reservation. Native guard cases, boot
+round-trip, reproducible build and repo checks pass. QEMU unavailable.
+The initial no-boot state is superseded by the physical result above.
+Register transcription received; next MMU/IRQ image is ready as noted above.
+The sweet device state, paths and owner permissions below are historical;
+they do not establish device access or destructive authorization for munch.
+
 ## Agent handoff / active work (2026-10-15, latest)
 
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<

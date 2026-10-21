@@ -1,5 +1,10 @@
 # Working on ios-sweet
 
+- All new GitHub-facing content must be in English: documentation, code
+  comments, commit messages, workflow labels, issues and pull requests.
+  The user conversation may remain in Russian. On 2026-10-21 the user also
+  requested rewriting our published changes in English; preserve the
+  original upstream history and keep any recovery refs local.
 - Read `NOTES.md` before starting; it contains the project goal, hardware facts,
   current blocker, local artifact locations and the next concrete action.
 - The user switches agents frequently. Update the active handoff in `NOTES.md`

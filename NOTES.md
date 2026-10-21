@@ -2,6 +2,33 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0018 READY: CI39629216316 success, artifact12359370312, kernelSHA
+2cfecc2f54c6ed35864d6b93a8154a3a27ec2634780284bc3c237fdfafb3b38d.
+Image shim/out/munch-xnu-0018/testios.img,125554688bytes,SHA256
+ e2579ef1db9aa75bb43077beb4e739b2ecc42fb18363aa9ffc6936635518bea1.
+Boot-v3 roundtrip, loader host5prefixes/8malformedcases, ADT/liveMMIO/RAM,
+staging/manifest and actual GPT parser tests pass. Read-only UFS firstboot
+selectsrd=ufsroot0 ufsroot=iosroot, emptyroot mount failure expected AFTER
+MUNCH UFS identifies16384MiB partition. No physical UFS result. Keep0017.
+Downloads stillactive94647 OSresume(~292MiB)+original8806400bytes,92975
+SystemOSresume(~137MiB)+original7536640bytes; neither complete nor CRCverified.
+User changedWiFi; originalstalledsessions43673/21581 interrupted, resumes
+are explicitremainingranges. Preserve allparts and resume if curltimeout.
+
+UFS CI39629216316 running from3cb8b397. Actual GPT parser host test passes
+known split, rejects userdata and6corruptions. Fresh dxb staging31patches/3
+providers and live ADT/MMIO checks pass. Added no-FUSE recursive APFS export
+option to builder; /tmp/munch-apfs-export tested on restore:1332entries,
+launchd/xpcproxy/cat/dyld byte equal. Metadata JSONL, links not materialized;
+not yet HFS root builder, xattrs/ACLs incomplete. Sources/docs uncommitted.
+Downloads current sessions94647 OSresume and92975 SystemOSresume. Prefixes
+OS8806400bytes and SystemOS7536640bytes; append suffixes ONLY after requests
+complete and expected full size/ZIPCRC checks. Endpoints in prior shellcalls.
+OSfull4730814044 CRC1724699551;SystemOSzipchunk1097727318 bytes including
+localheader67,compressed1097727251;inflated2743074816 CRC2140122061.
+No iOS partition writes performed; initial0018 should find iosroot then fail
+mount because no filesystem yet. No Munch physical UFS result yet.
+
 ANDROID DUALBOOT BASELINE CONFIRMED: user formatted Data, df reports
 /dev/block/sda34 90G total/1.6G used/88G available; Android boots normally.
 iosroot remains separate16GiB. User requests proceeding to actual iOS.

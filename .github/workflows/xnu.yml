@@ -1,4 +1,4 @@
-name: xnu
+name: Legacy upstream - manual build
 
 on:
   workflow_dispatch:
@@ -15,11 +15,6 @@ on:
       keep_going:
         description: make -k (collect all compile errors in one run)
         default: "true"
-  push:
-    branches: [main]
-    paths:
-      - "xnu/patches/**"
-      - ".github/workflows/xnu.yml"
 
 concurrency:
   group: xnu-${{ github.ref }}

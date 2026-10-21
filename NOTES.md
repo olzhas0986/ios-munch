@@ -2,6 +2,19 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0007 READY: run39582602130 succeeded for f8dc7753, artifact12337967305.
+Kernel research/munch/xnu-run-39582602130/kernel.development.sweet SHA256
+cca54c9e4b782f9d50f13044378384dcaeb996e91c207f54a66e040b8c8dbd9a.
+Final shim/out/munch-xnu-0007/testios.img is 16429056 bytes, SHA256
+95e6e5b2fd56d931afbda384cdd11a9c5f5050c44fbae1fdf181b20730261021.
+Replaces the earlier temporary 0007 packaging with the old kernel. Verified
+kernel MUNCH messages, manifest, CPU0 alias/reg, boot roundtrip, loader host
+scenarios and repository checks. Hardware confirmation pending.
+Legacy xnu workflow also auto-triggered on patch 0082 (run39582601927);
+cancellation requested successfully. Removed its push trigger and renamed
+it Legacy upstream - manual build; Munch - early XNU remains automatic.
+Next: user temporary fastboot boot of 0007, photo and CPU registration result.
+
 XNU0007 PREPARATION: user confirms XNU0006 screen unchanged for five minutes.
 Found deterministic CPU binding mismatch: munch ADT removed qcom,kryo470,
 but the compiled SweetCPU personality matches only that compatible alias.

@@ -8,7 +8,7 @@ kernel=$(realpath "$1")
 live_dtb=$(realpath "$2")
 init_ramdisk=$(realpath "$3")
 cd "$(dirname "$0")/.."
-out=out/munch-xnu-0014
+out=out/munch-xnu-0015
 mkdir -p "$out"
 python3 - "$kernel" <<'PY'
 from pathlib import Path

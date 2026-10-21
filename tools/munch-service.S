@@ -102,6 +102,9 @@ save_state:
     bl write_console
     add sp, sp, #16
     mov x21, #0
+#ifdef MUNCH_SYSLOG_PROBE
+    mov x26, #0
+#endif
 heartbeat:
     mov x0, #0
     mov x1, #0
@@ -111,6 +114,9 @@ heartbeat:
     mov x16, #93
     svc #0x80
     add x21, x21, #1
+#ifdef MUNCH_SYSLOG_PROBE
+    bl syslog_probe
+#endif
     adr x1, heartbeat_text
     adr x2, heartbeat_end
     sub x2, x2, x1
@@ -195,3 +201,111 @@ error_text:
 error_end:
 hex_digits:
     .ascii "0123456789abcdef"
+
+#ifdef MUNCH_SYSLOG_PROBE
+.p2align 2
+/* AF_UNIX datagram -> Apple syslogd -> a file containing our unique token. */
+syslog_probe:
+    mov x28, x30
+    cmp x26, #2
+    b.eq syslog_return
+    cbnz x26, syslog_read
+    mov x0, #1 /* AF_UNIX */
+    mov x1, #2 /* SOCK_DGRAM */
+    mov x2, #0
+    mov x16, #97 /* socket */
+    svc #0x80
+    b.cs syslog_return
+    mov x22, x0
+    adr x1, syslog_address
+    mov x2, #(syslog_address_end - syslog_address)
+    mov x16, #98 /* connect */
+    svc #0x80
+    b.cs syslog_close_socket
+    mov x0, x22
+    adr x1, syslog_message
+    mov x2, #(syslog_message_end - syslog_message)
+    mov x16, #4 /* datagram write */
+    svc #0x80
+    b.cs syslog_close_socket
+    cmp x0, #(syslog_message_end - syslog_message)
+    b.ne syslog_close_socket
+    mov x26, #1
+    adr x1, syslog_sent
+    adr x2, syslog_sent_end
+    sub x2, x2, x1
+    bl write_console
+syslog_close_socket:
+    mov x0, x22
+    mov x16, #6
+    svc #0x80
+    cbz x26, syslog_return
+syslog_read:
+    adr x0, syslog_file
+    mov x1, #0
+    mov x2, #0
+    mov x16, #5
+    svc #0x80
+    b.cs syslog_return
+    mov x22, x0
+    sub sp, sp, #512
+    mov x1, sp
+    mov x2, #512
+    mov x16, #3
+    svc #0x80
+    b.cs syslog_read_done
+    mov x27, x0
+    cmp x27, #(syslog_token_end - syslog_token)
+    b.lo syslog_read_done
+    sub x12, x27, #(syslog_token_end - syslog_token)
+    add x12, x12, #1
+    mov x9, #0
+syslog_scan:
+    adr x10, syslog_token
+    mov x11, #0
+syslog_compare:
+    add x13, x9, x11
+    ldrb w14, [sp, x13]
+    ldrb w15, [x10, x11]
+    cmp w14, w15
+    b.ne syslog_next
+    add x11, x11, #1
+    cmp x11, #(syslog_token_end - syslog_token)
+    b.ne syslog_compare
+    mov x26, #2
+    adr x1, syslog_ok
+    adr x2, syslog_ok_end
+    sub x2, x2, x1
+    bl write_console
+    b syslog_read_done
+syslog_next:
+    add x9, x9, #1
+    cmp x9, x12
+    b.lo syslog_scan
+syslog_read_done:
+    add sp, sp, #512
+    mov x0, x22
+    mov x16, #6
+    svc #0x80
+syslog_return:
+    mov x30, x28
+    ret
+syslog_address:
+    .byte syslog_address_end - syslog_address, 1
+    .asciz "/var/run/munch-syslog.sock"
+syslog_address_end:
+syslog_message:
+    .ascii "<13>Oct 21 00:00:00 munch munch-probe: MUNCH_SYSLOG_PIPELINE_OK\n"
+syslog_message_end:
+syslog_file:
+    .asciz "/var/log/munch-syslog.log"
+syslog_token:
+    .ascii "MUNCH_SYSLOG_PIPELINE_OK"
+syslog_token_end:
+syslog_sent:
+    .ascii "MUNCH SYSLOG: datagram sent\n"
+syslog_sent_end:
+syslog_ok:
+    .ascii "MUNCH SYSLOG: daemon wrote token OK\n"
+syslog_ok_end:
+#endif

@@ -99,6 +99,12 @@ def code_signature(image, code_limit, text_size, entitlements=None):
 
 def build(obj, entitlements=None):
     code, start = text_of(obj)
+    return build_code(code, start, entitlements)
+
+
+def build_code(code, start=0, entitlements=None):
+    """Wrap relocation-free position-independent code with its entry offset."""
+    assert 0 <= start < len(code), 'entry outside code'
     assert CODE_OFF + len(code) <= SEG, 'code does not fit in one __TEXT page'
     sect = struct.pack('<16s16sQQIIIIIIII', b'__text', b'__TEXT', BASE + CODE_OFF, len(code),
                        CODE_OFF, 3, 0, 0, S_ATTR_CODE, 0, 0, 0)

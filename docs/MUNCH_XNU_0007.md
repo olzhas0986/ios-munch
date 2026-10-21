@@ -25,7 +25,10 @@ Manifest, CPU binding, binary MUNCH messages, boot roundtrip and loader
 host scenarios passed. The legacy upstream workflow is now manual-only.
 
 The expected next milestone is `MUNCH CPU: boot CPU ... registered, SGI1
-verified, initialization complete`. Hardware confirmation is pending.
+verified, initialization complete`. Hardware confirmed CPU0 registration and SGI1 verification. BSD startup,
+DLIL/Skywalk self-tests and virtual interface thread scheduling followed.
+The final panic reports that root memory device md0 has not been configured,
+which is expected because this image contains no root RAMDisk.
 No root RAMDisk or complete iOS environment is supplied yet.
 
 ```sh

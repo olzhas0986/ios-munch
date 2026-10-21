@@ -1,0 +1,240 @@
+diff --git a/bsd/dev/munch_ufs.c b/bsd/dev/munch_ufs.c
+--- a/bsd/dev/munch_ufs.c
++++ b/bsd/dev/munch_ufs.c
+@@ -1,5 +1,5 @@
+ /*
+- * MUNCH internal UFS root device (read-only).
++ * MUNCH internal UFS root device.
+  *
+  * The Qualcomm UFS host (UFSHCI 2.1) is left enabled with the link up by the
+  * bootloader, which loaded our boot image from it. This driver reuses that
+@@ -12,7 +12,8 @@
+  *
+  * All DMA goes through one physically contiguous allocation (descriptors and
+  * a 1 MiB bounce buffer); the host is not cache coherent, so caches are
+- * cleaned/invalidated around each command. Writes are refused.
++ * cleaned/invalidated around each command. Writes require ufsrw=1 and are
++ * confined to the validated fixed iosroot extent.
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <sys/param.h>
+@@ -92,6 +93,7 @@
+ 	uint8_t tag;
+ 	uint64_t first_block, nblocks;          /* partition, in 4 KiB device blocks */
+ 	uint32_t secsize;                       /* logical sector size for the BSD layer */
++	bool writable;                          /* boot-arg ufsrw=1 */
+ 	int bmajor, cmajor;
+ 	dev_t bdev;
+ 	bool ready;
+@@ -119,26 +121,36 @@
+ }
+ 
+ /*
+- * One SCSI command in slot 0, data (if any) to/from the bounce buffer.
+- * Read direction only. Returns 0 or an errno.
++ * One SCSI command in slot 0, data (if any) to/from the bounce buffer
++ * (to the device when write is set). Returns 0 or an errno.
+  */
+ static int
+-ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len)
++ufs_scsi(const uint8_t *cdb, unsigned cdb_len, uint32_t len, bool write)
+ {
+ 	struct utrd *utrd = (struct utrd *)(su.dma + DMA_UTRL);
+ 	struct ucd *ucd = (struct ucd *)(su.dma + DMA_UCD);
+ 	uint64_t ucd_pa = su.dma_pa + DMA_UCD, bounce_pa = su.dma_pa + DMA_BOUNCE;
+ 
+ 	assert(len <= BOUNCE_SIZE);
+-	/* The bring-up driver has no media-write command path. */
+-	if (cdb_len == 0 || (cdb[0] != 0x00 && cdb[0] != 0x25 && cdb[0] != 0x28)) {
++	/* Validate the command at the final DMA submission boundary as well. */
++	if (cdb_len == 0) { return EINVAL; }
++	if (cdb[0] == 0x2a) {
++		if (cdb_len != 10 || !write || !su.ready || !su.writable ||
++		    su.first_block != MUNCH_ROOT_FIRST || su.nblocks != MUNCH_ROOT_BLOCKS) { return EROFS; }
++		uint64_t lba = ((uint32_t)cdb[2] << 24) | ((uint32_t)cdb[3] << 16) | ((uint32_t)cdb[4] << 8) | cdb[5];
++		uint32_t count = ((uint32_t)cdb[7] << 8) | cdb[8];
++		if (!count || lba < MUNCH_ROOT_FIRST || lba - MUNCH_ROOT_FIRST >= MUNCH_ROOT_BLOCKS ||
++		    count > MUNCH_ROOT_BLOCKS - (lba - MUNCH_ROOT_FIRST) || len != count * UFS_BLOCK) { return EPERM; }
++	} else if (cdb[0] == 0x35) {
++		if (write || len || !su.ready || !su.writable) { return EROFS; }
++	} else if (write || (cdb[0] != 0x00 && cdb[0] != 0x25 && cdb[0] != 0x28)) {
+ 		return EROFS;
+ 	}
+ 	bzero(utrd, sizeof(*utrd));
+ 	bzero(ucd, sizeof(*ucd));
+ 
+ 	ucd->cmd[0] = 0x01;                     /* COMMAND UPIU */
+-	ucd->cmd[1] = len ? 0x40 : 0x00;        /* R: data in */
++	ucd->cmd[1] = len ? (write ? 0x20 : 0x40) : 0x00;      /* W: data out, R: data in */
+ 	ucd->cmd[2] = su.lun;
+ 	ucd->cmd[3] = ++su.tag;
+ 	ucd->cmd[12] = (uint8_t)(len >> 24);
+@@ -147,7 +159,8 @@
+ 	ucd->cmd[15] = (uint8_t)len;
+ 	memcpy(&ucd->cmd[16], cdb, cdb_len);
+ 
+-	utrd->dw0 = (1u << 28) | ((len ? 2u : 0u) << 25) | (1u << 24);
++	/* DD: 1 = memory to device, 2 = device to memory. */
++	utrd->dw0 = (1u << 28) | ((len ? (write ? 1u : 2u) : 0u) << 25) | (1u << 24);
+ 	utrd->dw2 = 0x0f;                       /* OCS invalid until updated */
+ 	utrd->ucdba = (uint32_t)ucd_pa;
+ 	utrd->ucdbau = (uint32_t)(ucd_pa >> 32);
+@@ -212,7 +225,28 @@
+ 		(uint8_t)(lba >> 24), (uint8_t)(lba >> 16), (uint8_t)(lba >> 8), (uint8_t)lba,
+ 		0, (uint8_t)(count >> 8), (uint8_t)count, 0
+ 	};
+-	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK);
++	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, false);
++}
++
++static int
++ufs_write_blocks(uint64_t lba, uint32_t count)
++{
++	if (!su.ready || !su.writable || su.first_block != MUNCH_ROOT_FIRST || su.nblocks != MUNCH_ROOT_BLOCKS ||
++	    count == 0 || count > BOUNCE_SIZE / UFS_BLOCK || lba < su.first_block ||
++	    lba - su.first_block >= su.nblocks || count > su.nblocks - (lba - su.first_block)) {
++		return EPERM;
++	}
++	uint8_t cdb[10] = { 0x2a, 0,
++		(uint8_t)(lba >> 24), (uint8_t)(lba >> 16), (uint8_t)(lba >> 8), (uint8_t)lba,
++		0, (uint8_t)(count >> 8), (uint8_t)count, 0 };
++	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, true);
++}
++
++static int
++ufs_sync_cache(void)
++{
++	static const uint8_t cdb[10] = { 0x35 };
++	return ufs_scsi(cdb, sizeof(cdb), 0, false);
+ }
+ 
+ /* GPT values are copied out before each bounce-buffer reuse. */
+@@ -332,7 +366,7 @@
+ 	if (!su.ready) {
+ 		return ENXIO;
+ 	}
+-	return (flags & FWRITE) ? EROFS : 0;
++	return ((flags & FWRITE) && !su.writable) ? EROFS : 0;
+ }
+ 
+ static int
+@@ -350,8 +384,10 @@
+ 	uint32_t count = buf_count(bp);
+ 	uint64_t part_bytes = su.nblocks * UFS_BLOCK;
+ 
++	bool rd = buf_flags(bp) & B_READ;
++
+ 	buf_setresid(bp, count);
+-	if (!(buf_flags(bp) & B_READ)) {
++	if (!rd && !su.writable) {
+ 		error = EROFS;
+ 		goto done;
+ 	}
+@@ -374,11 +410,25 @@
+ 		uint32_t skip = (uint32_t)(pos % UFS_BLOCK);
+ 		uint32_t want = MIN(count - done, BOUNCE_SIZE - skip);
+ 		uint32_t blocks = (skip + want + UFS_BLOCK - 1) / UFS_BLOCK;
+-		error = ufs_read_blocks(su.first_block + lba, blocks);
++		void *bounce = (void *)(su.dma + DMA_BOUNCE);
++		if (rd) {
++			error = ufs_read_blocks(su.first_block + lba, blocks);
++			if (!error) {
++				memcpy(vaddr + done, (const char *)bounce + skip, want);
++			}
++		} else {
++			/* Partial device blocks at either end: read, merge, write back. */
++			if (skip || (want % UFS_BLOCK)) {
++				error = ufs_read_blocks(su.first_block + lba, blocks);
++			}
++			if (!error) {
++				memcpy((char *)bounce + skip, vaddr + done, want);
++				error = ufs_write_blocks(su.first_block + lba, blocks);
++			}
++		}
+ 		if (error) {
+ 			break;
+ 		}
+-		memcpy(vaddr + done, (const void *)(su.dma + DMA_BOUNCE + skip), want);
+ 		done += want;
+ 		buf_setresid(bp, count - done);
+ 	}
+@@ -419,13 +469,23 @@
+ 		*o = su.nblocks * UFS_BLOCK / su.secsize;
+ 		return 0;
+ 	case DKIOCISWRITABLE:
+-		*f = 0;
+-		return 0;
++		*f = su.writable;
++		return 0;
++	case DKIOCSYNCHRONIZE:
++	case DKIOCSYNCHRONIZECACHE: {
++		if (!su.writable) {
++			return 0;
++		}
++		lck_mtx_lock(&munch_ufs_lock);
++		int error = ufs_sync_cache();
++		lck_mtx_unlock(&munch_ufs_lock);
++		return error;
++	}
+ 	case DKIOCGETMAXBLOCKCOUNTREAD:
+ 		*o = BOUNCE_SIZE / su.secsize;
+ 		return 0;
+ 	case DKIOCGETMAXBLOCKCOUNTWRITE:
+-		*o = 0;
++		*o = su.writable ? BOUNCE_SIZE / su.secsize : 0;
+ 		return 0;
+ 	case DKIOCGETMAXSEGMENTCOUNTREAD:
+ 	case DKIOCGETMAXSEGMENTCOUNTWRITE:
+@@ -461,9 +521,12 @@
+ }
+ 
+ static int
+-munch_ufs_write(__unused dev_t dev, __unused struct uio *uio, __unused int ioflag)
+-{
+-	return EROFS;
++munch_ufs_write(dev_t dev, struct uio *uio, __unused int ioflag)
++{
++	if (!su.writable) {
++		return EROFS;
++	}
++	return physio(munch_ufs_strategy, NULL, dev, B_WRITE, minphys, uio, (int)su.secsize);
+ }
+ 
+ static const struct bdevsw munch_ufs_bdevsw = {
+@@ -509,6 +572,8 @@
+ 		return ENXIO;
+ 	}
+ 	PE_parse_boot_argn("ufsroot", want, sizeof(want));
++	uint32_t rw = 0;
++	PE_parse_boot_argn("ufsrw", &rw, sizeof(rw));
+ 	if (strcmp(want, "iosroot") || reg[0] != 0x1d84000 || reg[1] != 0x3000) {
+ 		printf("MUNCH UFS: refusing unexpected partition or controller\n");
+ 		return EINVAL;
+@@ -533,12 +598,12 @@
+ 	if (!error) {
+ 		static const uint8_t tur[6] = { 0x00 };
+ 		/* The first command after the bootloader may report a unit attention. */
+-		for (int i = 0; i < 3 && (error = ufs_scsi(tur, sizeof(tur), 0)); i++) {
++		for (int i = 0; i < 3 && (error = ufs_scsi(tur, sizeof(tur), 0, false)); i++) {
+ 		}
+ 	}
+ 	if (!error) {
+ 		static const uint8_t cap[10] = { 0x25 };
+-		error = ufs_scsi(cap, sizeof(cap), 8);
++		error = ufs_scsi(cap, sizeof(cap), 8, false);
+ 		if (!error) {
+ 			const uint8_t *b = (const uint8_t *)(su.dma + DMA_BOUNCE);
+ 			uint32_t last = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | b[3];
+@@ -568,9 +633,10 @@
+ 	su.bdev = makedev(su.bmajor, 0);
+ 	devfs_make_node(su.bdev, DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "ufsroot0");
+ 	devfs_make_node(makedev(su.cmajor, 0), DEVFS_CHAR, UID_ROOT, GID_OPERATOR, 0640, "rufsroot0");
++	su.writable = (rw != 0);
+ 	su.ready = true;
+-	printf("MUNCH UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, read-only, DMA 0x%llx\n",
+-	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20, su.dma_pa);
++	printf("MUNCH UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA 0x%llx\n",
++	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20, su.writable ? "read-write" : "read-only", su.dma_pa);
+ 	return 0;
+ }
+ 

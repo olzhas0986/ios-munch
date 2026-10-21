@@ -2,6 +2,100 @@
 
 ## Local munch handoff — 2026-10-21
 
+0019 PATCHES READY FOR CI:0085/86 reapply exactly over0018 baseline in
+fresh tempgit and reproduce reviewed sources. Actual write-function/final
+CDB-guard C harness passesbounds/readiness/permissions/bypass cases.
+Fullroot service patch selectively ports29/33/35/36/37/38/39/40/45 (platform
+AMFI/DERentitlements,SHA384/512,bindfs,AKSstub,watchdogstub), rootrw flag;
+no Sweet MMIO/input/USB drivers. ADT4..8GiB passesallreservedmemorychecks.
+VMv3 haspassedallmodules andisextracting; imageallocationnow>1GiB andgrowing.
+No rootfs installation or physical0019 yet. Need CI build+validated final
+HFS image, gzipchunks and guarded on-device installer before usercommands.
+
+FULL ROOT BUILD IN PROGRESS: AppOS prefix+resume90960 unwrapped/exported;
+ZIPCRC verified2589802408, inflated109051931, unencryptedIM4P payload
+109051904 ->AppOS-20H392.apfs. tools/munch-root-archive.py builds metadata-
+preserving PAX tar without mounts/chown: OS+cryptexOS/App, cachealiases,
+no-panic launchd jobs/CommCenter exclusion, restore dirs/preferences/keybag.
+Produced research/munch/munch-root-20H392.tar324526entries,11524578512data
+bytes; archivebuilder92161 completed. All319k records preserved including
+hardlinks/symlinks. Source pending commit, inspect before finaluse.
+QEMU11.1.2Arch runtime localdeps+firmware in root-builder-vm. AlpineLTS
+6.18.58 APK reconstructed35x4MiB chunks /tmp/munch-lts-parts; hfsplusmodule
+available. tools/munch-root-vm.py creates CPIO staticBusybox/moduledeporder,
+mounts ONLY local16GiBHFSimage file underisolatedguest, untarsreadonlyarchive,
+basicmetadata checks, cleanunmount. Current session13178 is VMv3 writing
+research/munch/root-full-20H392.hfs; logroot-full-vm-3/console.log reports
+MUNCH_ROOT_VM_EXTRACTING, stillcreating136kdirectories (noPASSyet). FirstVM
+7203 failedmissingfirmware,VMv2failedmoduleorder beforewrites. Do not use
+incomplete image. VMlauncher requires completed archive before launching.
+Prepared0085 fixediosroot-bound writes (adapt0030, stricterfinalCDBguard),
+0086 genericfullrootfeatures29/33/35/36/37/38/39/40/45+rootrw (NOdirtyroot
+bypass). Stage1..27,32,82..86; target0019; ADTmemory4..8GiB passesRAMaudit.
+Need actualwrite-boundary host tests, freshpatchcheck/CIpublish/build,
+finish/verifyimage+USBcompressedinstaller. No rootfs/devicewrites yet.
+
+UFS0018 CONFIRMED ON PHONE: user reads MUNCH UFS iosroot16GiB read-only.
+No full log/photo; partition identification is confirmed, mount error not
+transcribed. OTG NTFS USB works in TWRP. Actual recovery uname4.19.404R,
+/proc/filesystems excludesHFS+, /dev/fuse exists, tar exists, no newfs_hfs.
+No HFS+ filesystem write possible using normal recovery mount. hfsfuse
+upstream is read-only, so FUSE alone is insufficient. Chosen installation:
+compressed prepared HFS+ IMAGE ON USB, unpack/write entirely from TWRP to
+internaliosroot; PC prepares files, does not flash partitions. This fits
+user's request to install on phone; no user instruction against imageprep.
+Building local isolated Linux QEMU helper to assemble full HFS with native
+metadata/link support; no host mounts/privileged operations. QEMU11.1.2
+Arch packages/dependencies extracted in research/munch/root-builder-vm;
+LD_LIBRARY_PATH localusr/lib launches qemu-system-x86_64. Alpinevirt6.18.58
+has noHFSplus module; LTS146332001byte APK downloading session67850 (slow).
+Busyboxstatic1.37.0-r31 andvirtpkg cached/tmp, QEMUdata+SeaBIOSavailable.
+AppOS download48104 failed56 with1654962bytes; resume90960 finished0,
+AppOSprefix+.resume complete but ZIPinflate/CRC/extract still pending.
+Need build full-root tar from JSONL metadata+contents, runtime tweaks,
+cryptex/cache layout; guest image builder, compressed USBinstaller, and new
+bounded RW UFS kernel/platformAMFI/services. No full root package yet.
+
+FULL APFS EXPORTS COMPLETE: sessions10032/84528 exited0. OS318071entries,
+7937213671regularbytes7.392GiB,2324symlinks,37046hardlinkrecords; SystemOS
+2094entries,3359797050regularbytes3.129GiB,2symlinks,363hardlinkrecords.
+Total unique file payload~10.52GiB before filesystem overhead, fits16GiB
+in principle if hardlinks are preserved. Intermediate contents+JSONL only;
+not installable root/archive yet. Need cryptex integration/runtime tweaks,
+metadata-preserving device-side HFS+ writer and actual recovery capability
+report. USB is NTFS; user can format but leave it until support inspected.
+UFS0018 photo/result still missing. Next user step: temporary boot0018 for
+read-only iosroot identification, then TWRP+OTG read capability inventory.
+Do not imply full installer is ready or flash an incomplete rootfs.
+
+DOWNLOADS COMPLETE AND VERIFIED / PHONE INSTALL REQUEST: OS and SystemOS
+sessions36415/51880 exited0. Concatenated original+.resume+.resume2 into
+OS-20H392.verified.dmg4730814044bytes CRC66ccd39f SHA256
+80f426d5b8fca8552f95be427434f1911dbb4c2c6d28aad94f2426ddd0c92483.
+SystemOS-20H392.verified.zipchunk1097727318bytes SHA256
+a07f2851de0405835b73ace580ce2951ba2f7779e063cdf8df1027368dbb32da;
+rawdeflate inflated SystemOS-20H392.dmg2743074816bytes CRC7f8fabcd PASS.
+OS export currently10032 ->export-OS-20H392(+jsonl/log), >55000entries;
+SystemOS export launched next (see current session tool result).
+User wants rootfs INSTALLATION ON PHONE, not PC image flashing; owns16GB
+USB flash drive. Plan transport split rootfs archive+installer by USBOTG,
+install into INTERNAL iosroot16GiB via TWRP. Do not format USB unasked or
+promise booting XNU from USB; current driver only internal UFS. FAT32 max
+file size means split archive below4GiB (e.g.2GiB chunks); verify real free
+space. Stock/custom configs HFSPLUS disabled, FUSE enabled; actual TWRP
+kernel capabilities unknown. Need device-side installer implementation,
+not naive mount HFS+ assumptions. No installer or rootfs write yet. UFS0018
+hardware result still missing; ask for photo if moving to actual root boot.
+
+DOWNLOADS RESTARTED AT USER REQUEST: previous94647/92975 both exited28
+low-speed timeout. Original prefix+resume preserved: OS828818431 bytes total,
+SystemOS400070376 bytes. New sessions36415 OS explicit range2020315734..
+5922311346 ->research/munch/OS-20H392.resume2;51880 SystemOS range400070376..
+1097727317 ->SystemOS-20H392.resume2. No overall/low-speed timeout on these
+new requests. Concatenate original, .resume, .resume2 in that order ONLY
+when complete, then verify expected lengths and ZIP CRCs. No completed
+OS/SystemOS image yet; original filename OS.dmg is only a prefix, not usable.
+
 XNU0018 READY: CI39629216316 success, artifact12359370312, kernelSHA
 2cfecc2f54c6ed35864d6b93a8154a3a27ec2634780284bc3c237fdfafb3b38d.
 Image shim/out/munch-xnu-0018/testios.img,125554688bytes,SHA256

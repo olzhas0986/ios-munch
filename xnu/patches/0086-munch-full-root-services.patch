@@ -1,0 +1,1084 @@
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -691,6 +691,12 @@
+ 	bsd_init_kprintf("calling vfsinit\n");
+ 	vfsinit();
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	/* AMFI's MAC policy is built in on SWEET (bsd/kern/sweet_amfi.c). */
++	extern void sweet_amfi_policy_register(void);
++	sweet_amfi_policy_register();
++#endif
++
+ #if SWEET_HFS
+ 	/* HFS is built in on SWEET: register it like its kext would, before mounting root. */
+ 	extern void sweet_hfs_register(void);
+@@ -927,9 +933,20 @@
+ 		if (require_rootauth) {
+ 			/* enforce sealedness */
+ 			int autherr = VNOP_IOCTL(rootvnode, FSIOC_KERNEL_ROOTAUTH, NULL, 0, vfs_context_kernel());
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++			/*
++			 * SWEET has no chain of trust to extend: the kernel itself is
++			 * booted unsigned and there is no Image4/AMFI, and its HFS root
++			 * cannot be a sealed volume. Report it instead of panicking.
++			 */
++			if (autherr) {
++				printf("MUNCH: root volume is not authenticated (error %d); continuing unsealed\n", autherr);
++			}
++#else
+ 			if (autherr) {
+ 				panic("rootvp not authenticated after mounting");
+ 			}
++#endif
+ 		}
+ 	}
+ 
+diff --git a/bsd/kern/kern_core.c b/bsd/kern/kern_core.c
+--- a/bsd/kern/kern_core.c
++++ b/bsd/kern/kern_core.c
+@@ -34,6 +34,7 @@
+  */
+ #if CONFIG_COREDUMP
+ 
++#include <pexpert/arm64/board_config.h>
+ #include <mach/vm_param.h>
+ #include <mach/thread_status.h>
+ #include <sys/content_protection.h>
+@@ -116,7 +117,12 @@
+     thread_state_t tstate, mach_msg_type_number_t *count);
+ void task_act_iterate_wth_args(task_t, void (*)(thread_t, void *), void *);
+ 
+-#ifdef SECURE_KERNEL
++#if defined(SECURE_KERNEL) || defined(ARM64_BOARD_CONFIG_SWEET)
++/*
++ * SWEET: off by default (sysctl kern.coredump=1 enables it). A crashing iOS
++ * daemon maps the whole shared region, so one core is gigabytes on the root
++ * volume and takes minutes on the phone's UFS.
++ */
+ __XNU_PRIVATE_EXTERN int do_coredump = 0;       /* default: don't dump cores */
+ #else
+ __XNU_PRIVATE_EXTERN int do_coredump = 1;       /* default: dump cores */
+diff --git a/bsd/kern/sweet_amfi.c b/bsd/kern/sweet_amfi.c
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -5,12 +5,19 @@
+  * provides entitlements through the closed CoreEntitlements library. SWEET
+  * has neither, and code signing reaches it on every exec (ubc_cs_blob_add).
+  *
+- * This provider honestly reports that no entitlements exist: code signature
+- * blobs get no OSEntitlements object (csb_entitlements stays NULL, which the
+- * kernel already handles), every entitlement query fails and every copy
+- * returns nothing. Nothing is granted. Code signature and page hash
+- * validation stay with the kernel. Trust caches remain unavailable (no
+- * Image4), so the TrustCache interface is left at version 0.
++ * Entitlements: when a code signature is added, its XML entitlements blob
++ * (already checked against the code directory) is parsed into a
++ * SweetEntitlements object (iokit/Kernel/arm/SweetEntitlements.cpp), set as
++ * the blob's csb_entitlements, and every query is answered from it. DER-only
++ * signatures get none. Code signature and page hash validation stay with the
++ * kernel. Trust caches remain unavailable (no Image4), so the TrustCache
++ * interface is left at version 0.
++ *
++ * Platform binaries: AMFI marks binaries whose cdhash is in a trust cache
++ * as platform binaries from its vnode_check_signature MAC hook. Without
++ * trust caches, the SWEET policy below marks every binary on the root
++ * filesystem instead (the iOS system binaries are ad-hoc signed and are
++ * platform binaries only through the static trust cache).
+  *
+  * Interfaces no kernel path uses on SWEET (they serve other Apple kexts)
+  * panic with a clear message instead of being NULL.
+@@ -20,19 +27,45 @@
+ #include <kern/startup.h>
+ #include <libkern/amfi/amfi.h>
+ #include <mach/kern_return.h>
++#include <sys/codesign.h>
++#include <sys/mount.h>
+ #include <sys/proc.h>
+ #include <sys/systm.h>
++#include <sys/ubc_internal.h>
++#include <sys/vnode.h>
++#include <security/mac_policy.h>
++
++/* iokit/Kernel/arm/SweetEntitlements.cpp */
++void *sweet_entitlements_create(const CS_GenericBlob *blob, size_t blob_len);
++void *sweet_entitlements_copy_dict(const void *ent);
++bool sweet_entitlements_copy_xml(const void *ent, CS_GenericBlob **out);
++bool sweet_entitlements_bool(const void *ent, const char *name);
++bool sweet_entitlements_string(const void *ent, const char *name, const char *value);
++void *sweet_entitlements_copy_object(const void *ent, const char *name);
++unsigned int sweet_entitlements_count(const void *ent);
++extern void osobject_release(void *object);
++
++/* boot-arg sweet_amfi_debug=1: log the entitlements attached to each signature. */
++static TUNABLE(uint32_t, sweet_amfi_debug, "sweet_amfi_debug", 0);
++
++/* The entitlements object of a process's main binary, or NULL. */
++static void *
++sweet_proc_entitlements(proc_t proc)
++{
++	struct cs_blob *blob = csproc_get_blob(proc);
++	return blob != NULL ? csblob_os_entitlements_get(blob) : NULL;
++}
+ 
+ static void
+ sweet_amfi_entitlements_invalidate(__unused void *os_entitlements)
+ {
+-	/* No OSEntitlements objects are ever created. */
++	/* Queries already require a valid signature (csblob_get_entitlements). */
+ }
+ 
+ static void *
+-sweet_amfi_entitlements_as_dict(__unused void *os_entitlements)
+-{
+-	return NULL;
++sweet_amfi_entitlements_as_dict(void *os_entitlements)
++{
++	return sweet_entitlements_copy_dict(os_entitlements);
+ }
+ 
+ static CEError_t
+@@ -51,10 +84,9 @@
+ }
+ 
+ static bool
+-sweet_amfi_entitlements_get_xml(__unused void *os_entitlements,
+-    __unused CS_GenericBlob **blob)
+-{
+-	return false;
++sweet_amfi_entitlements_get_xml(void *os_entitlements, CS_GenericBlob **blob)
++{
++	return sweet_entitlements_copy_xml(os_entitlements, blob);
+ }
+ 
+ static bool
+@@ -85,60 +117,100 @@
+ 	return KERN_NOT_SUPPORTED;
+ }
+ 
++/*
++ * Attach the parsed XML entitlements to a code signature being added. This
++ * must happen in the vnode_check_signature MAC hook, like AMFI does: later,
++ * converting a 4K-page signature to multilevel hashes drops the XML blob.
++ * Nothing is granted when the blob is missing, unreadable or does not match
++ * its code directory hash.
++ */
++static void
++sweet_amfi_attach_entitlements(struct cs_blob *code_signing_blob)
++{
++	void *xml = NULL;
++	size_t xml_len = 0;
++
++	if (csblob_get_entitlements(code_signing_blob, &xml, &xml_len) != 0) {
++		printf("MUNCH AMFI: %s: entitlements do not match the code directory, granting none\n",
++		    csblob_get_identity(code_signing_blob));
++		return;
++	}
++	if (xml == NULL) {
++		return;                 /* no XML entitlements */
++	}
++	void *ent = sweet_entitlements_create(xml, xml_len);
++	if (ent == NULL) {
++		printf("MUNCH AMFI: %s: unreadable entitlements (%zu bytes), granting none\n",
++		    csblob_get_identity(code_signing_blob), xml_len);
++		return;
++	}
++	if (sweet_amfi_debug) {
++		/* The test keys only exist in tools/mkinit.py test signatures. */
++		printf("MUNCH AMFI: %s: %u entitlements (test: bool %d string %d array %d)\n",
++		    csblob_get_identity(code_signing_blob), sweet_entitlements_count(ent),
++		    sweet_entitlements_bool(ent, "com.apple.private.sweet.test-bool"),
++		    sweet_entitlements_string(ent, "com.apple.private.sweet.test-string", "hello"),
++		    sweet_entitlements_string(ent, "com.apple.private.sweet.test-array", "two"));
++	}
++	csblob_os_entitlements_set(code_signing_blob, ent);    /* takes a reference */
++	osobject_release(ent);
++}
++
+ static kern_return_t
+ sweet_amfi_adjust_without_monitor(__unused void *os_entitlements,
+     __unused struct cs_blob *code_signing_blob)
+ {
+-	/* Leave the blob without an entitlements context: it has none. */
++	/* Entitlements were attached in sweet_amfi_vnode_check_signature. */
+ 	return KERN_SUCCESS;
+ }
+ 
+ static kern_return_t
+-sweet_amfi_query_boolean(__unused const void *os_entitlements,
+-    __unused const char *entitlement_name)
+-{
+-	return KERN_DENIED;
+-}
+-
+-static kern_return_t
+-sweet_amfi_query_boolean_with_proc(__unused const proc_t proc,
+-    __unused const char *entitlement_name)
+-{
+-	return KERN_DENIED;
+-}
+-
+-static kern_return_t
+-sweet_amfi_query_string(__unused const void *os_entitlements,
+-    __unused const char *entitlement_name, __unused const char *entitlement_value)
+-{
+-	return KERN_DENIED;
+-}
+-
+-static kern_return_t
+-sweet_amfi_query_string_with_proc(__unused const proc_t proc,
+-    __unused const char *entitlement_name, __unused const char *entitlement_value)
+-{
+-	return KERN_DENIED;
+-}
+-
+-static kern_return_t
+-sweet_amfi_copy_object(__unused const void *os_entitlements,
+-    __unused const char *entitlement_name, void **entitlement_object)
+-{
++sweet_amfi_query_boolean(const void *os_entitlements, const char *entitlement_name)
++{
++	return sweet_entitlements_bool(os_entitlements, entitlement_name) ? KERN_SUCCESS : KERN_DENIED;
++}
++
++static kern_return_t
++sweet_amfi_query_boolean_with_proc(const proc_t proc, const char *entitlement_name)
++{
++	return sweet_amfi_query_boolean(sweet_proc_entitlements(proc), entitlement_name);
++}
++
++static kern_return_t
++sweet_amfi_query_string(const void *os_entitlements,
++    const char *entitlement_name, const char *entitlement_value)
++{
++	return sweet_entitlements_string(os_entitlements, entitlement_name, entitlement_value) ?
++	       KERN_SUCCESS : KERN_DENIED;
++}
++
++static kern_return_t
++sweet_amfi_query_string_with_proc(const proc_t proc,
++    const char *entitlement_name, const char *entitlement_value)
++{
++	return sweet_amfi_query_string(sweet_proc_entitlements(proc), entitlement_name,
++	           entitlement_value);
++}
++
++static kern_return_t
++sweet_amfi_copy_object(const void *os_entitlements,
++    const char *entitlement_name, void **entitlement_object)
++{
++	void *obj = sweet_entitlements_copy_object(os_entitlements, entitlement_name);
+ 	if (entitlement_object) {
+-		*entitlement_object = NULL;
+-	}
+-	return KERN_NOT_FOUND;
+-}
+-
+-static kern_return_t
+-sweet_amfi_copy_object_with_proc(__unused const proc_t proc,
+-    __unused const char *entitlement_name, void **entitlement_object)
+-{
+-	if (entitlement_object) {
+-		*entitlement_object = NULL;
+-	}
+-	return KERN_NOT_FOUND;
++		*entitlement_object = obj;
++	} else if (obj) {
++		osobject_release(obj);
++	}
++	return obj ? KERN_SUCCESS : KERN_NOT_FOUND;
++}
++
++static kern_return_t
++sweet_amfi_copy_object_with_proc(const proc_t proc,
++    const char *entitlement_name, void **entitlement_object)
++{
++	return sweet_amfi_copy_object(sweet_proc_entitlements(proc), entitlement_name,
++	           entitlement_object);
+ }
+ 
+ static const amfi_t sweet_amfi = {
+@@ -170,7 +242,56 @@
+ sweet_amfi_register(void)
+ {
+ 	amfi_interface_register(&sweet_amfi);
+-	printf("MUNCH AMFI: built-in interface registered (no entitlements)\n");
++	printf("MUNCH AMFI: built-in interface registered (XML entitlements)\n");
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_MIDDLE, sweet_amfi_register);
++
++/*
++ * The signature reached this hook validated, so mark it CS_SIGNED like AMFI
++ * does: exec copies the flag to the process, and csproc_get_blob() (csops
++ * status, cdhash, platform and entitlement queries by process) ignores
++ * processes without it. Every signed binary on the root filesystem is a
++ * platform binary. New signatures (ubc_cs_blob_add passes its writable copy;
++ * revalidation passes the read-only blob itself) get their entitlements here.
++ */
++static int
++sweet_amfi_vnode_check_signature(struct vnode *vp, __unused struct label *label,
++    __unused cpu_type_t cpu_type, struct cs_blob *cs_blob,
++    unsigned int *cs_flags, __unused unsigned int *signer_type,
++    __unused int flags, __unused unsigned int platform,
++    __unused char **fatal_failure_desc, __unused size_t *fatal_failure_desc_len)
++{
++	mount_t mp = vnode_mount(vp);
++	*cs_flags |= CS_SIGNED;
++	if (mp != NULL && (vfs_flags(mp) & MNT_ROOTFS)) {
++		*cs_flags |= CS_PLATFORM_BINARY;
++	}
++	if (cs_blob != cs_blob->csb_ro_addr && cs_blob->csb_entitlements == NULL) {
++		sweet_amfi_attach_entitlements(cs_blob);
++	}
++	return 0;
++}
++
++static const struct mac_policy_ops sweet_amfi_mac_ops = {
++	.mpo_vnode_check_signature = sweet_amfi_vnode_check_signature,
++};
++
++static struct mac_policy_conf sweet_amfi_mac_conf = {
++	.mpc_name = "MUNCH AMFI",
++	.mpc_fullname = "MUNCH built-in Mobile File Integrity",
++	.mpc_ops = &sweet_amfi_mac_ops,
++};
++
++static mac_policy_handle_t sweet_amfi_mac_handle;
++
++/* Called from bsd_init once MAC policies can register, before any exec. */
++void sweet_amfi_policy_register(void);
++
++void
++sweet_amfi_policy_register(void)
++{
++	int error = mac_policy_register(&sweet_amfi_mac_conf, &sweet_amfi_mac_handle, NULL);
++	printf("MUNCH AMFI: platform binary policy %s (%d)\n",
++	    error ? "NOT registered" : "registered", error);
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -1257,6 +1257,12 @@
+ 
+ 		mp = vfs_rootmountalloc_internal(vfsp, "root_device");
+ 		mp->mnt_devvp = rootvp;
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++		uint32_t rootrw = 0;
++		if (PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw)) && rootrw) {
++			mp->mnt_flag &= ~MNT_RDONLY;
++		}
++#endif
+ 
+ 		if (vfsp->vfc_mountroot) {
+ 			error = (*vfsp->vfc_mountroot)(mp, rootvp, ctx);
+diff --git a/config/MASTER.arm64.sweet b/config/MASTER.arm64.sweet
+--- a/config/MASTER.arm64.sweet
++++ b/config/MASTER.arm64.sweet
+@@ -31,7 +31,7 @@
+ #  BSD_RELEASE =    [ BSD_BASE ]
+ #  BSD_DEV =        [ BSD_BASE config_vnguard ]
+ #  BSD_DEBUG =      [ BSD_BASE config_vnguard ]
+-#  FILESYS_BASE =   [ devfs fdesc fifo mockfs sweet_hfs fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_ext_resolver config_searchfs config_volfs config_appledouble nullfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
++#  FILESYS_BASE =   [ devfs fdesc fifo mockfs sweet_hfs fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_ext_resolver config_searchfs config_volfs config_appledouble nullfs bindfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
+ #  FILESYS_RELEASE= [ FILESYS_BASE ]
+ #  FILESYS_DEV =    [ FILESYS_BASE config_iocount_trace ]
+ #  FILESYS_DEBUG =  [ FILESYS_BASE config_iocount_trace ]
+diff --git a/iokit/Kernel/arm/SweetEntitlements.cpp b/iokit/Kernel/arm/SweetEntitlements.cpp
+new file mode 100644
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetEntitlements.cpp
+@@ -0,0 +1,184 @@
++/*
++ * Entitlements for the SWEET built-in AMFI interface (bsd/kern/sweet_amfi.c).
++ *
++ * Apple's AMFI keeps a CoreEntitlements context per code signature; that
++ * library is closed. Here each signature with an XML entitlements blob gets
++ * a SweetEntitlements object: the blob parsed into an OSDictionary (the
++ * representation IOKit and the kernel KPIs hand out) plus the original XML,
++ * which csops(CS_OPS_ENTITLEMENTS_BLOB) returns. The blob was already
++ * checked against the code directory by csblob_get_entitlements().
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(SWEET)
++#include <IOKit/IOLib.h>
++#include <libkern/c++/OSArray.h>
++#include <libkern/c++/OSBoolean.h>
++#include <libkern/c++/OSDictionary.h>
++#include <libkern/c++/OSString.h>
++#include <libkern/c++/OSUnserialize.h>
++#include <kern/cs_blobs.h>
++
++class SweetEntitlements : public OSObject {
++	OSDeclareDefaultStructors(SweetEntitlements);
++
++public:
++	OSDictionary *dict;
++	CS_GenericBlob *xml;            /* the signature's blob, header included */
++	size_t xml_len;
++
++	bool init(void) APPLE_KEXT_OVERRIDE;
++	void free(void) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(SweetEntitlements, OSObject);
++
++bool
++SweetEntitlements::init(void)
++{
++	return OSObject::init();
++}
++
++void
++SweetEntitlements::free(void)
++{
++	OSSafeReleaseNULL(dict);
++	if (xml) {
++		kfree_data(xml, xml_len);
++		xml = NULL;
++	}
++	OSObject::free();
++}
++
++static SweetEntitlements *
++sweet_ent(const void *obj)
++{
++	return OSDynamicCast(SweetEntitlements, (OSObject *)(uintptr_t)obj);
++}
++
++extern "C" {
++/* Parsed entitlements for one XML blob (header included), or NULL. Retained. */
++void *
++sweet_entitlements_create(const CS_GenericBlob *blob, size_t blob_len)
++{
++	if (blob == NULL || blob_len <= sizeof(CS_GenericBlob) ||
++	    ntohl(blob->magic) != CSMAGIC_EMBEDDED_ENTITLEMENTS ||
++	    ntohl(blob->length) != blob_len) {
++		return NULL;
++	}
++
++	/* OSUnserializeXML needs a terminating NUL inside the buffer. */
++	size_t text_len = blob_len - sizeof(CS_GenericBlob);
++	char *text = (char *)kalloc_data(text_len + 1, Z_WAITOK);
++	if (text == NULL) {
++		return NULL;
++	}
++	memcpy(text, blob->data, text_len);
++	text[text_len] = '\0';
++	OSObject *parsed = OSUnserializeXML(text, text_len + 1);
++	kfree_data(text, text_len + 1);
++
++	OSDictionary *dict = OSDynamicCast(OSDictionary, parsed);
++	if (dict == NULL) {
++		OSSafeReleaseNULL(parsed);
++		return NULL;
++	}
++
++	SweetEntitlements *ent = OSTypeAlloc(SweetEntitlements);
++	CS_GenericBlob *xml = (CS_GenericBlob *)kalloc_data(blob_len, Z_WAITOK);
++	if (ent == NULL || !ent->init() || xml == NULL) {
++		OSSafeReleaseNULL(ent);
++		if (xml) {
++			kfree_data(xml, blob_len);
++		}
++		dict->release();
++		return NULL;
++	}
++	memcpy(xml, blob, blob_len);
++	ent->dict = dict;
++	ent->xml = xml;
++	ent->xml_len = blob_len;
++	return ent;
++}
++
++/* The entitlements as an OSDictionary. Retained. */
++void *
++sweet_entitlements_copy_dict(const void *obj)
++{
++	SweetEntitlements *ent = sweet_ent(obj);
++	if (ent == NULL) {
++		return NULL;
++	}
++	ent->dict->retain();
++	return ent->dict;
++}
++
++/* A kalloc_data copy of the XML blob; the caller frees it (blob length). */
++bool
++sweet_entitlements_copy_xml(const void *obj, CS_GenericBlob **out)
++{
++	SweetEntitlements *ent = sweet_ent(obj);
++	if (ent == NULL) {
++		return false;
++	}
++	CS_GenericBlob *copy = (CS_GenericBlob *)kalloc_data(ent->xml_len, Z_WAITOK);
++	if (copy == NULL) {
++		return false;
++	}
++	memcpy(copy, ent->xml, ent->xml_len);
++	*out = copy;
++	return true;
++}
++
++/* name is true (a boolean entitlement). */
++bool
++sweet_entitlements_bool(const void *obj, const char *name)
++{
++	SweetEntitlements *ent = sweet_ent(obj);
++	return ent != NULL && ent->dict->getObject(name) == kOSBooleanTrue;
++}
++
++/* name is the string value, or an array containing it. */
++bool
++sweet_entitlements_string(const void *obj, const char *name, const char *value)
++{
++	SweetEntitlements *ent = sweet_ent(obj);
++	if (ent == NULL || value == NULL) {
++		return false;
++	}
++	OSObject *v = ent->dict->getObject(name);
++	OSString *s = OSDynamicCast(OSString, v);
++	if (s != NULL) {
++		return s->isEqualTo(value);
++	}
++	OSArray *a = OSDynamicCast(OSArray, v);
++	for (unsigned int i = 0; a != NULL && i < a->getCount(); i++) {
++		s = OSDynamicCast(OSString, a->getObject(i));
++		if (s != NULL && s->isEqualTo(value)) {
++			return true;
++		}
++	}
++	return false;
++}
++
++/* Number of entitlements. */
++unsigned int
++sweet_entitlements_count(const void *obj)
++{
++	SweetEntitlements *ent = sweet_ent(obj);
++	return ent != NULL ? ent->dict->getCount() : 0;
++}
++
++/* The value of name, or NULL. Retained. */
++void *
++sweet_entitlements_copy_object(const void *obj, const char *name)
++{
++	SweetEntitlements *ent = sweet_ent(obj);
++	OSObject *v = ent != NULL ? ent->dict->getObject(name) : NULL;
++	if (v != NULL) {
++		v->retain();
++	}
++	return v;
++}
++}
++#endif /* SWEET */
+diff --git a/iokit/Kernel/arm/SweetKeyStore.cpp b/iokit/Kernel/arm/SweetKeyStore.cpp
+new file mode 100644
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetKeyStore.cpp
+@@ -0,0 +1,227 @@
++/*
++ * Built-in AppleKeyStore for SWEET: a device without a passcode whose
++ * system keybag is always loaded and unlocked.
++ *
++ * Apple's AppleKeyStore kext (closed, SEP-backed) owns the keybags behind
++ * data protection. libaks (AppleKeyStore.framework, statically in keybagd)
++ * opens IOServiceMatching("AppleKeyStore") with type 0, calls selector 0,
++ * then one selector per aks_* function (iOS 16.7 numbering below). keybagd
++ * --init asks for the system bag (14) and only loads systembag.kb when the
++ * answer is kIOReturnNotFound; answering with a handle is the path a
++ * userspace reboot takes, so no bag file is needed.
++ *
++ * Every call is logged (selector, caller, argument shapes, result) so the
++ * next selectors the system needs show up on the console; unknown ones fail
++ * with kIOReturnUnsupported.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(SWEET)
++#include <IOKit/IOService.h>
++#include <IOKit/IOUserClient.h>
++#include <IOKit/IOKitKeys.h>
++#include <IOKit/IOLib.h>
++#include <IOKit/IOMemoryDescriptor.h>
++#include <libkern/c++/OSString.h>
++#include <sys/proc.h>
++
++/* libaks selectors (AppleKeyStore.framework, iOS 16.7). */
++enum {
++	kAKSOpen             = 0,
++	kAKSCreateBag        = 2,
++	kAKSSaveBag          = 3,
++	kAKSUnloadBag        = 4,
++	kAKSSetSystem        = 5,
++	kAKSLoadBag          = 6,
++	kAKSGetLockState     = 7,
++	kAKSUnlockDevice     = 9,
++	kAKSWrapKey          = 10,
++	kAKSUnwrapKey        = 11,
++	kAKSUnlockBag        = 12,
++	kAKSLockBag          = 13,
++	kAKSGetSystem        = 14,
++	kAKSGetDeviceState   = 17,
++	kAKSAssertHold       = 26,
++	kAKSAssertDrop       = 27,
++	kAKSUnloadSessionBags = 55,
++	kAKSNotifyStateSet   = 102,
++};
++
++/* The system (device) bag handle. */
++#define SWEET_AKS_SYSTEM_HANDLE 0
++
++/*
++ * aks lock state bits (aks_get_lock_state): bit 2 is "unlocked since boot"
++ * (MobileKeyBag MKBDeviceUnlockedSinceBoot); clear lock bits = unlocked.
++ */
++#define SWEET_AKS_LOCK_STATE    0x4
++
++class AppleKeyStore : public IOService {
++	OSDeclareDefaultStructors(AppleKeyStore);
++
++public:
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(AppleKeyStore, IOService);
++
++bool
++AppleKeyStore::start(IOService *provider)
++{
++	if (!IOService::start(provider)) {
++		return false;
++	}
++	setProperty(kIOUserClientClassKey, "AppleKeyStoreUserClient");
++	registerService();
++	IOLog("MUNCH AKS: AppleKeyStore registered (no passcode, unlocked)\n");
++	return true;
++}
++
++class AppleKeyStoreUserClient : public IOUserClient {
++	OSDeclareDefaultStructors(AppleKeyStoreUserClient);
++
++public:
++	IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	IOReturn externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++	    IOExternalMethodDispatch *dispatch, OSObject *target,
++	    void *reference) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(AppleKeyStoreUserClient, IOUserClient);
++
++IOReturn
++AppleKeyStoreUserClient::clientClose(void)
++{
++	terminate();
++	return kIOReturnSuccess;
++}
++
++/* Copy len bytes to the caller's output structure (inband or descriptor). */
++static IOReturn
++sweet_aks_struct_out(IOExternalMethodArguments *args, const void *buf, uint32_t len)
++{
++	if (args->structureOutputDescriptor != NULL) {
++		if (len > args->structureOutputDescriptor->getLength()) {
++			return kIOReturnNoSpace;
++		}
++		args->structureOutputDescriptor->writeBytes(0, buf, len);
++		args->structureOutputDescriptorSize = len;
++		return kIOReturnSuccess;
++	}
++	if (args->structureOutput == NULL || len > args->structureOutputSize) {
++		return kIOReturnNoSpace;
++	}
++	memcpy(args->structureOutput, buf, len);
++	args->structureOutputSize = len;
++	return kIOReturnSuccess;
++}
++
++/* Append SEQUENCE { UTF8String key, INTEGER value } (short forms only). */
++static uint32_t
++sweet_aks_der_pair(uint8_t *p, const char *key, uint8_t value)
++{
++	uint32_t klen = (uint32_t)strlen(key);
++	uint32_t n = 0;
++	p[n++] = 0x30;
++	p[n++] = (uint8_t)(2 + klen + 3);
++	p[n++] = 0x0c;
++	p[n++] = (uint8_t)klen;
++	memcpy(p + n, key, klen);
++	n += klen;
++	p[n++] = 0x02;
++	p[n++] = 0x01;
++	p[n++] = value;
++	return n;
++}
++
++/*
++ * Device state (selector 17): a DER SET of key/INTEGER pairs that libaks
++ * decode_extended_state reads: ss state, sls lock state (MKBGetDeviceLockState:
++ * 0 = unlocked), sb backoff, sfa failed attempts, sgs generation, sas
++ * assertions, sgpe grace period, srcd recovery countdown.
++ */
++static IOReturn
++sweet_aks_device_state(IOExternalMethodArguments *args)
++{
++	static const struct {
++		const char *key;
++		uint8_t value;
++	} fields[] = {
++		{ "ss", SWEET_AKS_LOCK_STATE }, { "sls", 0 }, { "sb", 0 }, { "sfa", 0 },
++		{ "sgs", 0 }, { "sas", 0 }, { "sgpe", 0 }, { "srcd", 0 },
++	};
++	uint8_t buf[128];
++	uint32_t n = 2;
++	for (unsigned int i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
++		n += sweet_aks_der_pair(buf + n, fields[i].key, fields[i].value);
++	}
++	buf[0] = 0x31;
++	buf[1] = (uint8_t)(n - 2);
++	return sweet_aks_struct_out(args, buf, n);
++}
++
++static uint32_t
++sweet_aks_struct_out_size(IOExternalMethodArguments *args)
++{
++	return args->structureOutputDescriptor != NULL ?
++	       (uint32_t)args->structureOutputDescriptor->getLength() : args->structureOutputSize;
++}
++
++IOReturn
++AppleKeyStoreUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++    __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
++    __unused void *reference)
++{
++	IOReturn ret = kIOReturnSuccess;
++	uint32_t in_scalars = args->scalarInputCount;
++	uint32_t in_struct = args->structureInputDescriptor != NULL ?
++	    (uint32_t)args->structureInputDescriptor->getLength() : args->structureInputSize;
++	uint32_t out_scalars = args->scalarOutputCount;
++	uint32_t out_struct = sweet_aks_struct_out_size(args);
++	uint64_t arg0 = in_scalars > 0 ? args->scalarInput[0] : 0;
++
++	switch (selector) {
++	case kAKSOpen:
++	case kAKSUnloadBag:
++	case kAKSSetSystem:
++	case kAKSUnlockDevice:
++	case kAKSUnlockBag:
++	case kAKSLockBag:
++	case kAKSAssertHold:
++	case kAKSAssertDrop:
++	case kAKSUnloadSessionBags:
++	case kAKSNotifyStateSet:
++		args->scalarOutputCount = 0;
++		break;
++	case kAKSGetSystem:
++		if (out_scalars < 1) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		args->scalarOutput[0] = SWEET_AKS_SYSTEM_HANDLE;
++		args->scalarOutputCount = 1;
++		break;
++	case kAKSGetLockState:
++		if (out_scalars < 1) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		args->scalarOutput[0] = SWEET_AKS_LOCK_STATE;
++		args->scalarOutputCount = 1;
++		break;
++	case kAKSGetDeviceState:
++		args->scalarOutputCount = 0;
++		ret = sweet_aks_device_state(args);
++		break;
++	default:
++		ret = kIOReturnUnsupported;
++		break;
++	}
++
++	char name[32];
++	proc_selfname(name, sizeof(name));
++	IOLog("MUNCH AKS: %s sel %u arg0 %llu in %u/%u out %u/%u -> 0x%x\n", name, selector,
++	    arg0, in_scalars, in_struct, out_scalars, out_struct, ret);
++	return ret;
++}
++#endif /* SWEET */
+diff --git a/iokit/Kernel/arm/SweetWatchdog.cpp b/iokit/Kernel/arm/SweetWatchdog.cpp
+new file mode 100644
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetWatchdog.cpp
+@@ -0,0 +1,107 @@
++/*
++ * Built-in IOWatchdog for SWEET.
++ *
++ * watchdogd (launchd job with _PanicOnCrash) opens IOServiceMatching(
++ * "IOWatchdog") with type 1 and exits when it is missing, which panics the
++ * system. On Apple hardware the kext arms a SoC watchdog that resets the
++ * device unless watchdogd keeps checking in. SWEET has no reset path, so
++ * this service accepts every call (check-in 1, enable/disable userspace
++ * monitoring 3/4, 0/5, struct calls 2 and 9) and does nothing; each
++ * selector is logged the first time it is used.
++ *
++ * watchdogd also writes the device boot stage to the PMU: it looks up
++ * the IOService with IOPMUPrimary = 1 and crashes when there is none
++ * (customer builds ignore -wdt_no_pmu). SWEET has no Apple PMU, so this
++ * service carries IOPMUPrimary and accepts property writes.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(SWEET)
++#include <IOKit/IOService.h>
++#include <IOKit/IOUserClient.h>
++#include <IOKit/IOKitKeys.h>
++#include <IOKit/IOLib.h>
++#include <IOKit/IOMemoryDescriptor.h>
++#include <sys/proc.h>
++
++class IOWatchdog : public IOService {
++	OSDeclareDefaultStructors(IOWatchdog);
++
++public:
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++	IOReturn setProperties(OSObject *properties) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IOWatchdog, IOService);
++
++IOReturn
++IOWatchdog::setProperties(__unused OSObject *properties)
++{
++	return kIOReturnSuccess;
++}
++
++bool
++IOWatchdog::start(IOService *provider)
++{
++	if (!IOService::start(provider)) {
++		return false;
++	}
++	setProperty(kIOUserClientClassKey, "IOWatchdogUserClient");
++	setProperty("IOPMUPrimary", 1ULL, 32);
++	registerService();
++	IOLog("MUNCH WDT: IOWatchdog registered (accepts check-ins, never fires)\n");
++	return true;
++}
++
++class IOWatchdogUserClient : public IOUserClient {
++	OSDeclareDefaultStructors(IOWatchdogUserClient);
++
++public:
++	IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	IOReturn externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++	    IOExternalMethodDispatch *dispatch, OSObject *target,
++	    void *reference) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(IOWatchdogUserClient, IOUserClient);
++
++IOReturn
++IOWatchdogUserClient::clientClose(void)
++{
++	terminate();
++	return kIOReturnSuccess;
++}
++
++static uint64_t sweet_wdt_logged;       /* selectors already logged (< 64) */
++
++IOReturn
++IOWatchdogUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++    __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
++    __unused void *reference)
++{
++	for (uint32_t i = 0; i < args->scalarOutputCount; i++) {
++		args->scalarOutput[i] = 0;
++	}
++	if (args->structureOutputDescriptor != NULL) {
++		IOByteCount len = args->structureOutputDescriptor->getLength();
++		for (IOByteCount off = 0; off < len; off += 8) {
++			static const uint64_t zero = 0;
++			args->structureOutputDescriptor->writeBytes(off, &zero, len - off < 8 ? len - off : 8);
++		}
++	} else if (args->structureOutput != NULL) {
++		bzero(args->structureOutput, args->structureOutputSize);
++	}
++
++	if (selector >= 64 || !(sweet_wdt_logged & (1ULL << selector))) {
++		if (selector < 64) {
++			sweet_wdt_logged |= 1ULL << selector;
++		}
++		char name[32];
++		proc_selfname(name, sizeof(name));
++		IOLog("MUNCH WDT: %s sel %u in %u/%u out %u/%u -> ok\n", name, selector,
++		    args->scalarInputCount, args->structureInputSize,
++		    args->scalarOutputCount, args->structureOutputSize);
++	}
++	return kIOReturnSuccess;
++}
++#endif /* SWEET */
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -57,6 +57,16 @@
+     "     'IOProviderClass' = IOPlatformDevice;"
+     "     'IONameMatch'     = 'munch,display';"
+     "   },"
++    "   {"
++    "     'IOClass'         = AppleKeyStore;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = AppleKeyStore;"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOWatchdog;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = IOWatchdog;"
++    "   },"
+ #endif
+     "   {"
+     "     'IOClass'         = IOPanicPlatform;"
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -14,3 +14,6 @@
+ # Munch portable surface and inherited boot framebuffer
+ iokit/Kernel/arm/SweetSurface.cpp optional iokitcpp
+ iokit/Kernel/arm/SweetFramebuffer.cpp optional iokitcpp
++iokit/Kernel/arm/SweetEntitlements.cpp                               optional iokitcpp
++iokit/Kernel/arm/SweetKeyStore.cpp                               optional iokitcpp
++iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitcpp
+diff --git a/libkern/conf/Makefile.template b/libkern/conf/Makefile.template
+--- a/libkern/conf/Makefile.template
++++ b/libkern/conf/Makefile.template
+@@ -53,6 +53,15 @@
+ sweet_dec32be.o_CFLAGS_ADD += -mgeneral-regs-only
+ sweet_enc32be.o_CFLAGS_ADD += -mgeneral-regs-only
+ corecrypto_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
++# BearSSL SHA-384/512 for SHA384_*/SHA512_* (corecrypto_sha2.c).
++sweet_sha2big.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_dec64be.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_enc64be.o_INCFLAGS = $(SWEET_AES_INC)
++corecrypto_sha2.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_sha2big.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_dec64be.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_enc64be.o_CFLAGS_ADD += -mgeneral-regs-only
++corecrypto_sha2.o_CFLAGS_ADD += -mgeneral-regs-only
+ endif
+ 
+ # Runtime support functions don't interact well with LTO (9294679)
+diff --git a/libkern/conf/files b/libkern/conf/files
+--- a/libkern/conf/files
++++ b/libkern/conf/files
+@@ -109,6 +109,9 @@
+ libkern/crypto/sweet_sha1.c	optional crypto
+ libkern/crypto/sweet_dec32be.c	optional crypto
+ libkern/crypto/sweet_enc32be.c	optional crypto
++libkern/crypto/sweet_sha2big.c	optional crypto
++libkern/crypto/sweet_dec64be.c	optional crypto
++libkern/crypto/sweet_enc64be.c	optional crypto
+ libkern/crypto/corecrypto_aesxts.c		optional crypto
+ libkern/crypto/corecrypto_rand.c		optional crypto
+ libkern/crypto/corecrypto_rsa.c		    optional crypto
+diff --git a/libkern/crypto/corecrypto_sha2.c b/libkern/crypto/corecrypto_sha2.c
+--- a/libkern/crypto/corecrypto_sha2.c
++++ b/libkern/crypto/corecrypto_sha2.c
+@@ -38,7 +38,9 @@
+ /*
+  * SWEET has no corecrypto kext, so g_crypto_funcs stays NULL. SHA-256 uses
+  * XNU's built-in implementation directly, as the SWEET PRNG does; this also
+- * serves code-signing page hashes. SHA-384/512 have no built-in provider.
++ * serves code-signing page hashes. SHA-384/512 use BearSSL's portable
++ * implementation (libkern/crypto/sweet_sha2big.c), its context stored in
++ * the caller's SHA384_CTX/SHA512_CTX.
+  */
+ #include <corecrypto/ccsha2.h>
+ #define SHA256_DI()                     (&ccsha256_ltc_di)
+@@ -82,6 +84,51 @@
+ 	ccdigest_final(di, ctx->ctx, digest);
+ }
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/inc/bearssl_hash.h"
++
++_Static_assert(sizeof(br_sha384_context) <= sizeof(SHA512_CTX),
++    "BearSSL SHA-384/512 context must fit in SHA512_CTX");
++#define BR_CTX(ctx) ((br_sha384_context *)(void *)(ctx))
++
++void
++SHA384_Init(SHA384_CTX *ctx)
++{
++	br_sha384_init(BR_CTX(ctx));
++}
++
++void
++SHA384_Update(SHA384_CTX *ctx, const void *data, size_t len)
++{
++	br_sha384_update(BR_CTX(ctx), data, len);
++}
++
++void
++SHA384_Final(void *digest, SHA384_CTX *ctx)
++{
++	br_sha384_out(BR_CTX(ctx), digest);
++}
++
++void
++SHA512_Init(SHA512_CTX *ctx)
++{
++	br_sha512_init(BR_CTX(ctx));
++}
++
++void
++SHA512_Update(SHA512_CTX *ctx, const void *data, size_t len)
++{
++	br_sha512_update(BR_CTX(ctx), data, len);
++}
++
++void
++SHA512_Final(void *digest, SHA512_CTX *ctx)
++{
++	br_sha512_out(BR_CTX(ctx), digest);
++}
++
++#else /* !ARM64_BOARD_CONFIG_SWEET */
++
+ void
+ SHA384_Init(SHA384_CTX *ctx)
+ {
+@@ -146,6 +193,8 @@
+ 
+ 	ccdigest_final(di, ctx->ctx, digest);
+ }
++
++#endif /* !ARM64_BOARD_CONFIG_SWEET */
+ 
+ #else
+ 
+diff --git a/libkern/crypto/sweet_dec64be.c b/libkern/crypto/sweet_dec64be.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_dec64be.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/codec/dec64be.c"
++#endif
+diff --git a/libkern/crypto/sweet_enc64be.c b/libkern/crypto/sweet_enc64be.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_enc64be.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/codec/enc64be.c"
++#endif
+diff --git a/libkern/crypto/sweet_sha2big.c b/libkern/crypto/sweet_sha2big.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_sha2big.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/hash/sha2big.c"
++#endif

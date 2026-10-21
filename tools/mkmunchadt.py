@@ -13,7 +13,7 @@ import subprocess
 import adt
 import mkadt
 
-BASE, SIZE = 0x100000000, 0x40000000  # restricted 4..5 GiB early aperture
+BASE, SIZE = 0x100000000, 0x100000000  # audited 4..8 GiB for the system shared cache
 
 
 def cells(dtb, node, name, optional=False):
@@ -85,7 +85,7 @@ def audit(dtb):
         fixed += 1
     else:
         raise ValueError("unterminated FDT reservation map")
-    print(f"RAM audit: {fixed} fixed reservations and {dynamic} dynamic pools exclude 4..5 GiB")
+    print(f"RAM audit: {fixed} fixed reservations and {dynamic} dynamic pools exclude 4..8 GiB")
 
 
 def setprop(node, name, data):
@@ -136,7 +136,7 @@ def main():
     data = build()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(data)
-    print(f"{args.output}: {len(data)} bytes, CPU0 only, virtual IRQ27, read-only iosroot controller node")
+    print(f"{args.output}: {len(data)} bytes, CPU0 only, virtual IRQ27, bounded iosroot controller node")
 
 
 if __name__ == "__main__":

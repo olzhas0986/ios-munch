@@ -82,3 +82,14 @@ Post-reboot blockdev results match exactly: userdata96283394048 bytes,
 iosroot17179869184 bytes. The user unmounted /sdcard and /data with no
 reported error. Next: recreate Data using TWRP Format Data and inspect its
 log and capacity after rebooting recovery. No formatting result yet.
+
+## Installation transport preference
+
+The user requests installing the root filesystem on the phone and has a
+16GB USB flash drive available. Prepare a file archive plus a device-side
+installer, transported through USB OTG, targeting internal iosroot. This
+is separate from booting XNU off USB, which is not implemented here.
+Account for actual USB free space and FAT32's per-file limit using archive
+chunks smaller than4GiB. Do not format the USB drive without authorization.
+The saved Android configs disable HFS+ but enable FUSE; inspect actual
+recovery support before choosing a device-side filesystem writer.

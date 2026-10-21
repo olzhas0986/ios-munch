@@ -79,7 +79,7 @@ _start:
 	mov x1, sp
 	bl write_console
 	add sp, sp, #128
-	b tick
+	b marker_done
 marker_read_failed:
 	add sp, sp, #128
 marker_failed:
@@ -87,6 +87,49 @@ marker_failed:
 	adr x2, marker_error_end
 	sub x2, x2, x1
 	bl write_console
+marker_done:
+#endif
+
+#ifdef MUNCH_DYLD_PROBE
+	mov x21, #0
+	mov x0, x19
+	mov x1, #1
+	mov x16, #90 /* dup2 */
+	svc #0x80
+	mov x0, x19
+	mov x1, #2
+	mov x16, #90
+	svc #0x80
+	mov x16, #2 /* fork: x1=1 in child */
+	svc #0x80
+	b.cs fork_failed
+	cbnz x1, dynamic_child
+	mov x21, x0
+	b tick
+fork_failed:
+	adr x1, fork_error
+	adr x2, fork_error_end
+	sub x2, x2, x1
+	bl write_console
+	b tick
+dynamic_child:
+	sub sp, sp, #32
+	adr x0, cat_path
+	adr x9, dyld_marker_path
+	stp x0, x9, [sp]
+	str xzr, [sp, #16]
+	mov x1, sp
+	mov x2, #0
+	mov x16, #59 /* execve */
+	svc #0x80
+	adr x1, exec_error
+	adr x2, exec_error_end
+	sub x2, x2, x1
+	bl write_console
+	mov x0, #127
+	mov x16, #1 /* _exit */
+	svc #0x80
+	b hang
 #endif
 
 tick:
@@ -98,6 +141,25 @@ tick:
 	adr	x4, five_sec
 	mov	x16, #SYS_select
 	svc	#0x80
+
+#ifdef MUNCH_DYLD_PROBE
+	cbz x21, wait_done
+	sub sp, sp, #16
+	mov x0, x21
+	mov x1, sp
+	mov x2, #1 /* WNOHANG */
+	mov x3, #0
+	mov x16, #7 /* wait4 */
+	svc #0x80
+	b.cs wait_pending
+	cbz x0, wait_pending
+	ldr w0, [sp]
+	mov x21, #0
+	bl print_status
+wait_pending:
+	add sp, sp, #16
+wait_done:
+#endif
 
 	adr	x1, alive
 	adr	x2, alive_end
@@ -135,4 +197,52 @@ marker_path:
 marker_error:
 	.ascii "MUNCH HFS: marker read FAILED\n"
 marker_error_end:
+#endif
+
+#ifdef MUNCH_DYLD_PROBE
+/* Report raw wait status without libc; exit(0) is 00000000. */
+	.p2align 2
+print_status:
+	mov x23, x30
+	mov w24, w0
+	adr x1, status_text
+	adr x2, status_text_end
+	sub x2, x2, x1
+	bl write_console
+	sub sp, sp, #16
+	mov w10, #28
+	mov x11, #0
+	adr x12, hex_digits
+1:
+	lsr w13, w24, w10
+	and w13, w13, #15
+	ldrb w13, [x12, x13]
+	strb w13, [sp, x11]
+	add x11, x11, #1
+	sub w10, w10, #4
+	cmp x11, #8
+	b.ne 1b
+	mov w13, #10
+	strb w13, [sp, #8]
+	mov x1, sp
+	mov x2, #9
+	bl write_console
+	add sp, sp, #16
+	mov x30, x23
+	ret
+cat_path:
+	.asciz "/bin/cat"
+dyld_marker_path:
+	.asciz "/etc/munch-dyld-test"
+fork_error:
+	.ascii "MUNCH DYLD: fork FAILED\n"
+fork_error_end:
+exec_error:
+	.ascii "MUNCH DYLD: execve FAILED\n"
+exec_error_end:
+status_text:
+	.ascii "MUNCH DYLD: child wait status 0x"
+status_text_end:
+hex_digits:
+	.ascii "0123456789abcdef"
 #endif

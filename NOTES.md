@@ -2,6 +2,30 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0010 APPLE DYLD TEST READY: extracted official restore /bin/cat, dyld
+and dependency closure (38 plain ARM64 Mach-Os,10472448bytes), all strong
+deps present, missing only weak /usr/local/lib/libobjc-env.dylib.
+Tools: APFS reader source/build helper and recursive extractor committed;
+read-only APFS extraction works without /dev/fuse. Apple files ignored in
+research/munch/restore-userland, per-file hash/dependency manifest present.
+Static PID1 forks/execs /bin/cat /etc/munch-dyld-test with console stdout/
+stderr, polls wait4 WNOHANG and reports status while keeping heartbeat.
+Expected child marker: MUNCH DYLD: Apple cat read this file OK; raw status0.
+Image shim/out/munch-xnu-0010/testios.img,33206272bytes,SHA256
+68a4a58625a2274ad00793f48531bb8e0e89a7579d6ea051d8d7577c3a687175.
+Same verified kernel as0007,16MiB HFS root. Extract-back checks for all38
+files, init code-signature hashes, boot/RAMDisk roundtrip, bounds, dependency
+closure, loader host and repo/cross-build checks pass. No physical0010 yet.
+See docs/MUNCH_XNU_0010.md for provenance/build. Next: temporary boot and
+child output/status; diagnose dyld errors from actual output, not guesses.
+
+XNU0009 HFS READ CONFIRMED: user explicitly reports the expected
+"MUNCH HFS: /etc/munch-release read OK" line. Real HFS root and separate
+file lookup/read work on the phone. Proceeding toward dyld.
+Official iPhone10,3 iOS16.7.16/20H392 IPSW metadata downloaded; selected
+RestoreRamDisk 087-86719-047.dmg (erase variant) from BuildManifest,
+range-download in progress. Inputs stay ignored under research/munch.
+
 XNU0009 REAL FILESYSTEM TEST READY: user explicitly authorizes continuing
 without repeated permission requests. Added tools/mkmunchroot.py: creates
 16 MiB HFS+ using local newfs_hfs and xpwn hfs editor, no mount/root needed.

@@ -2,6 +2,7 @@
 """Build an unmounted HFS+ RAMDisk containing the static MUNCH PID1 probe."""
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import struct
 import subprocess
@@ -14,6 +15,7 @@ def main():
     parser.add_argument('editor', type=Path)
     parser.add_argument('init', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument("--userland", type=Path, help="extracted restore dependency closure")
     a = parser.parse_args()
     formatter, editor, init = (str(p.resolve()) for p in (a.formatter, a.editor, a.init))
     program = Path(init).read_bytes()
@@ -42,6 +44,27 @@ def main():
             extracted = work / 'extracted'
             edit('extract', destination, str(extracted))
             assert extracted.read_bytes() == source.read_bytes(), destination
+        if a.userland:
+            manifest = json.loads((a.userland / 'manifest.json').read_text())
+            directories = {'/', '/sbin', '/dev', '/etc', '/usr', '/usr/lib', '/private', '/private/var', '/tmp'}
+            for name, info in manifest['files'].items():
+                relative = Path(name)
+                assert relative.is_absolute() and '..' not in relative.parts
+                source = a.userland / name.lstrip('/')
+                assert hashlib.sha256(source.read_bytes()).hexdigest() == info['sha256']
+                for directory in reversed(relative.parents):
+                    if str(directory) not in directories:
+                        edit('mkdir', str(directory))
+                        edit('chmod', '755', str(directory))
+                        directories.add(str(directory))
+                edit('add', str(source.resolve()), name)
+                edit('chmod', '555', name)
+                extracted = work / 'verify-userland'
+                edit('extract', name, str(extracted))
+                assert extracted.read_bytes() == source.read_bytes(), name
+            marker.write_text('MUNCH DYLD: Apple cat read this file OK\n')
+            edit('add', str(marker), '/etc/munch-dyld-test')
+            edit('chmod', '444', '/etc/munch-dyld-test')
         header = image.read_bytes()[1024:1536]
         assert header[:2] == b'H+' and struct.unpack_from('>I', header, 40)[0] == 4096
         listing = edit('ls', '/sbin').stdout.decode()

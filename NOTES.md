@@ -2,6 +2,28 @@
 
 ## Local munch handoff — 2026-10-21
 
+MUNCH GRAPHICS PREPARATION: prioritized actual iOS display path over syslog.
+Added0083 from upstream0046 portable IOSurface/IOMobileFramebuffer sources,
+integrated independently of AKS/watchdog/UFS. New runtime messages MUNCH,
+IONameMatch munch,display, framebuffer guard exactPA9c000000/1080x2400/
+stride4320. PE publishes arm-io display child; ADT now includes native disp0.
+Selected patches exactly0001..0027,32,82,83. Applicability, staging/manifest,
+ADT binding and repo checks pass. Need CI build and actual userspace IOKit/
+IOSurface graphic probe. No image0016 or hardware result yet. Failed0015
+syslog remains excluded from the working root baseline. Keep0014.
+
+XNU0015 FAILED / SYSLOG DETOUR DEPRIORITIZED: user transcribes CPU0 panic,
+caller0xfffffe0007ad0ec4, unexpected exec of non-platform binary
+/usr/sbin/syslogd: com.apple.syslogd. Exact exit role/signing cause has not
+been verified; do not claim this is malformed source or CPU incompatibility.
+User questions daemon value since photos/manual transcription are fine.
+Acknowledged syslogd is not needed for current diagnostics and deprioritized
+this detour. Do not spend another device iteration on a logging-only test
+without a concrete dependency from the iOS path. Known-good base remains
+XNU0014 (launchd/restart/RAM filesystem), not failed0015. Preserve evidence.
+Next work should prioritize actual iOS root/userland and display/input
+requirements, rather than accumulating auxiliary daemon probes.
+
 XNU0015 APPLE SYSLOGD PROBE READY: user says photos are fine; do not push
 for a host logging channel. Added same-restore syslogd and87-file closure
 101552464bytes. launchd job publishes logger Mach service and local Unix

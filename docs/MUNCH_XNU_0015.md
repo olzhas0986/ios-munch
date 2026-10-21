@@ -51,3 +51,11 @@ fastboot boot testios.img
 
 Photograph MUNCH SYSLOG output or daemon errors/panic. This test uses only
 local IPC and RAM storage. Temporary boot only.
+
+## Hardware outcome
+
+User reports a CPU0 panic at caller0xfffffe0007ad0ec4: unexpected exec of
+non-platform binary /usr/sbin/syslogd: com.apple.syslogd. No pipeline success
+was established. The syslogd test is deprioritized because screen photos
+remain sufficient and this daemon is not a current iOS bring-up dependency.
+XNU0014 remains the known-good baseline.

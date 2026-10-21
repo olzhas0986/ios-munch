@@ -113,7 +113,11 @@ def build():
             setprop(node, "firmware-version", mkadt.cstr("munch-early-shim"))
             setprop(node, "system-firmware-version", mkadt.cstr("munch-early-shim"))
         elif node.name == "arm-io":
-            node.children = [n for n in node.children if n.name != "disp0"]
+            for child in node.children:
+                if child.name == "disp0":
+                    setprop(child, "compatible", mkadt.cstr("munch,display"))
+                    setprop(child, "canvas-width", mkadt.u32(1080))
+                    setprop(child, "canvas-height", mkadt.u32(2400))
     setprop(root, "compatible", b"D22AP\0iPhone10,3\0xiaomi,munch\0xiaomi,sweet\0qcom,sm8250\0AppleARM\0")
     return adt.serialize(root)
 

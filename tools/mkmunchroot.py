@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--userland", type=Path, help="extracted restore dependency closure")
     parser.add_argument("--launchd", action="store_true", help="stage Apple launchd behind a diagnostic PID1 wrapper")
     parser.add_argument("--system-version", type=Path)
+    parser.add_argument("--accounts", type=Path, help="restore master.passwd and group directory")
     a = parser.parse_args()
     if a.launchd:
         assert a.userland and a.system_version, "launchd requires userland and SystemVersion.plist"
@@ -86,19 +87,36 @@ def main():
                         directories.add(directory)
                 edit('symlink', '/var', '/private/var')
 
-                def add_data(path, data):
+                def add_data(path, data, mode="444"):
                     local = work / 'config'
                     local.write_bytes(data)
                     edit('add', str(local), path)
-                    edit('chmod', '444', path)
+                    edit('chmod', mode, path)
                     extracted = work / 'verify-config'
                     edit('extract', path, str(extracted))
                     assert extracted.read_bytes() == data, path
 
                 add_data('/System/Library/CoreServices/SystemVersion.plist', a.system_version.read_bytes())
                 add_data('/etc/munch-service-test', b'MUNCH LAUNCHD: managed service ran OK\n')
-                add_data('/etc/passwd', b'root:*:0:0:System Administrator:/var/root:/bin/sh\n')
-                add_data('/etc/group', b'wheel:*:0:root\n')
+                if a.accounts:
+                    master = (a.accounts / 'master.passwd').read_bytes()
+                    group = (a.accounts / 'group').read_bytes()
+                    records = [line.split(':') for line in master.decode().splitlines()
+                               if line and not line.startswith('#')]
+                    assert all(len(row) == 10 for row in records)
+                    by_name = {row[0]: row for row in records}
+                    assert by_name['root'][2:4] == ['0', '0']
+                    assert by_name['mobile'][2:4] == ['501', '501']
+                    assert any(line.startswith(b'mobile:') and line.split(b':')[2] == b'501'
+                               for line in group.splitlines())
+                    passwd = ''.join(':'.join((row[0], '*', row[2], row[3], row[7], row[8], row[9])) + '\n'
+                                     for row in records).encode()
+                    add_data('/etc/master.passwd', master, '600')
+                    add_data('/etc/passwd', passwd)
+                    add_data('/etc/group', group)
+                else:
+                    add_data('/etc/passwd', b'root:*:0:0:System Administrator:/var/root:/bin/sh\n')
+                    add_data('/etc/group', b'wheel:*:0:root\n')
                 job = {'Label': 'org.munch.probe', 'ProgramArguments': ['/bin/cat', '/etc/munch-service-test'],
                        'RunAtLoad': True, 'LaunchOnlyOnce': True,
                        'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}

@@ -2,6 +2,10 @@
 
 ## Local munch handoff — 2026-10-21
 
+GRAPHICS FOLLOW-UP: fixed remaining framebuffer log prefixes using exact
+literal replacements, preserving internal SWEET_FB macro names. Added
+reproducible graphics probe build script. Final kernel rebuild pending.
+
 GRAPHICS CI FIRST FAILURE: run39612721389 failed compiling framebuffer:
 log-renaming regex matched a quote in a comment and renamed references
 without matching macro definitions. Corrected all framebuffer macro names;

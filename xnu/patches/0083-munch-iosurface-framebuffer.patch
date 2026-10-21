@@ -1083,7 +1083,7 @@
 +	fHeight = (uint32_t)video.v_height;
 +	fRowBytes = (uint32_t)video.v_rowBytes;
 +	if (fPhys != 0x9c000000ULL || fWidth != 1080 || fHeight != 2400 || fRowBytes != 4320) {
-+		IOLog("SWEET FB: no boot framebuffer\n");
++		IOLog("MUNCH FB: no boot framebuffer\n");
 +		return false;
 +	}
 +	fLock = IOLockAlloc();
@@ -1092,14 +1092,14 @@
 +	fPixels = fSurface != NULL ? fSurface->kernelAddress() : 0;
 +	fWorkLoop = IOWorkLoop::workLoop();
 +	if (fLock == NULL || fClients == NULL || fPixels == 0 || fWorkLoop == NULL) {
-+		IOLog("SWEET FB: setup failed\n");
++		IOLog("MUNCH FB: setup failed\n");
 +		OSSafeReleaseNULL(fSurface);    /* stays published: also held by the table */
 +		OSSafeReleaseNULL(fWorkLoop);
 +		return false;
 +	}
 +	fVsync = IOTimerEventSource::timerEventSource(this, &AppleCLCD::vsyncFired);
 +	if (fVsync == NULL || fWorkLoop->addEventSource(fVsync) != kIOReturnSuccess) {
-+		IOLog("SWEET FB: no vsync timer\n");
++		IOLog("MUNCH FB: no vsync timer\n");
 +		return false;
 +	}
 +	fVsync->setTimeoutUS(SWEET_FB_VSYNC_US);
@@ -1108,7 +1108,7 @@
 +	setProperty("external", false);
 +	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
 +	registerService();
-+	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
++	IOLog("MUNCH FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
 +	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id);
 +	return true;
 +}
@@ -1194,7 +1194,7 @@
 +		SweetSurface *s = sweet_surface_copy(id);
 +		if (sweet_fb_swaps_logged < 16) {
 +			sweet_fb_swaps_logged++;
-+			IOLog("SWEET FB: swap %u layer %u surface %u %ux%u fmt 0x%x bpr %u a %d,%d %ux%u b %d,%d %dx%d\n",
++			IOLog("MUNCH FB: swap %u layer %u surface %u %ux%u fmt 0x%x bpr %u a %d,%d %ux%u b %d,%d %dx%d\n",
 +			    get32(rec, 0x50), layer, id, s ? s->width : 0, s ? s->height : 0,
 +			    s ? s->pixelFormat : 0, s ? s->bytesPerRow : 0, sx, sy, get32(a, 8),
 +			    get32(a, 12), dx, dy, w, h);
@@ -1371,7 +1371,7 @@
 +			IOLockUnlock(fFB->fLock);
 +			char name[32];
 +			proc_selfname(name, sizeof(name));
-+			IOLog("SWEET FB: %s notifications type %u %s\n", name, type,
++			IOLog("MUNCH FB: %s notifications type %u %s\n", name, type,
 +			    args->scalarInput[0] ? "on" : "off");
 +		}
 +		break;
@@ -1392,7 +1392,7 @@
 +		}
 +		char name[32];
 +		proc_selfname(name, sizeof(name));
-+		IOLog("SWEET FB: %s sel %u in %u/%u out %u/%u -> 0x%x\n", name, selector,
++		IOLog("MUNCH FB: %s sel %u in %u/%u out %u/%u -> 0x%x\n", name, selector,
 +		    args->scalarInputCount, args->structureInputSize,
 +		    args->scalarOutputCount, args->structureOutputSize, ret);
 +	}

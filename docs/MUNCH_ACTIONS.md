@@ -12,7 +12,7 @@ XNU-8796.141.3, ARM64 DEVELOPMENT, pinned blacktop builder
 the existing generic non-Apple ARM implementation. Munch RAM/ADT/timer and
 an isolated boot shim are prepared locally after retrieving the artifact.
 
-Only patches0001–0027 and three pinned source-provider scripts are selected.
+Only patches 0001–0027 plus 0032 (portable SHA-1) and three pinned source-provider scripts are selected. Patches 0028–0031 remain excluded.
 Sweet UFS0028+, partition writes, USB and input drivers are excluded. Required
 patch application failures are fatal. The artifact must be plain ARM64
 Mach-O and sweet_ufs.c must be absent. This is a kernel, not testios.img.

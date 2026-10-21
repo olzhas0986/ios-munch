@@ -8,7 +8,8 @@ import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
-LAST = 27  # 0028 adds the sweet UFS driver; later hardware is not selected.
+LAST = 32
+PATCH_NUMBERS = tuple(range(1, 28)) + (32,)  # SHA-1 only; skip UFS/write patches.
 
 
 def main():
@@ -33,10 +34,10 @@ def main():
     selected = []
     for file in sorted((ROOT / "xnu/patches").iterdir()):
         match = re.fullmatch(r"(\d{4})-.+\.(patch|sh)", file.name)
-        if match and 1 <= int(match[1]) <= LAST:
+        if match and int(match[1]) in PATCH_NUMBERS:
             selected.append(file)
     numbers = [int(p.name[:4]) for p in selected if p.suffix == ".patch"]
-    if sorted(numbers) != list(range(1, LAST + 1)):
+    if sorted(numbers) != list(PATCH_NUMBERS):
         raise ValueError("incomplete or duplicate early patch sequence")
     destination = target / "patches"
     destination.mkdir(exist_ok=True)
@@ -44,14 +45,14 @@ def main():
         raise ValueError("use a fresh dxb checkout: numbered patches already present")
     # All checks complete before mutating the pinned build script/patch directory.
     build.write_text(text)
-    manifest = {"device": "munch", "stage": "early-no-ufs", "last_patch": LAST,
+    manifest = {"device": "munch", "stage": "early-no-ufs", "last_patch": LAST, "patch_numbers": list(PATCH_NUMBERS),
                 "xnu_tag": "xnu-8796.141.3", "internal_machine_config": "SWEET", "files": []}
     for file in selected:
         shutil.copy2(file, destination / file.name)
         manifest["files"].append({"name": file.name,
                                   "sha256": hashlib.sha256(file.read_bytes()).hexdigest()})
     (target / "munch-patches.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"Staged {LAST} patches and {len(selected) - LAST} source-provider scripts; no UFS/hardware patches after 0027")
+    print(f"Staged {len(PATCH_NUMBERS)} patches and {len(selected) - len(PATCH_NUMBERS)} source-provider scripts; SHA-1 included, no UFS/write patches")
 
 
 if __name__ == "__main__":

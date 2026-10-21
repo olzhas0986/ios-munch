@@ -45,3 +45,11 @@ fastboot boot testios.img
 After the first MUNCH SERVICE line, allow about30 seconds for the planned
 restart. Capture generation1, requesting one restart, generation2 and
 subsequent heartbeats, or any error/panic. Temporary boot only.
+
+## Hardware result
+
+The user reported RAM I/O OK, PID0x5, UID0 and generation2. This confirms
+root credential selection, launchd restart and state retained on the RAM
+filesystem across the two service processes. This is not reboot-persistent
+storage or evidence of a long-duration stress test; heartbeat duration was
+not reported.

@@ -10,7 +10,8 @@ case "${1:-mockfs}" in
     dyld) out=shim/out/munch-init-0010; flags=(-DMUNCH_HFS_PROBE=1 -DMUNCH_DYLD_PROBE=1) ;;
     launchd) out=shim/out/munch-init-0012; flags=(-DMUNCH_HFS_PROBE=1 -DMUNCH_LAUNCHD_PROBE=1) ;;
     service) out=shim/out/munch-service-0014; source=tools/munch-service.S ;;
-    *) echo "Usage: bash tools/build-munch-init.sh [mockfs|hfs|dyld|launchd|service]" >&2; exit 2 ;;
+    syslog) out=shim/out/munch-service-0015; source=tools/munch-service.S; flags=(-DMUNCH_SYSLOG_PROBE=1) ;;
+    *) echo "Usage: bash tools/build-munch-init.sh [mockfs|hfs|dyld|launchd|service|syslog]" >&2; exit 2 ;;
 esac
 mkdir -p "$out"
 aarch64-linux-gnu-gcc -x assembler-with-cpp "${flags[@]}" -c "$source" -o "$out/init.o"

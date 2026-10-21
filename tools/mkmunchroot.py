@@ -21,7 +21,10 @@ def main():
     parser.add_argument("--system-version", type=Path)
     parser.add_argument("--accounts", type=Path, help="restore master.passwd and group directory")
     parser.add_argument("--service", type=Path, help="launchd stability probe Mach-O")
+    parser.add_argument("--syslog", action="store_true", help="Apple syslogd and local datagram test")
     a = parser.parse_args()
+    if a.syslog:
+        assert a.service, "syslog probe requires the service executable"
     if a.service:
         assert a.launchd and a.accounts, "service requires launchd and accounts"
     if a.launchd:
@@ -134,6 +137,21 @@ def main():
                            'UserName': 'root', 'RunAtLoad': True, 'KeepAlive': True, 'ThrottleInterval': 5,
                            'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}
                     add_data('/System/Library/LaunchDaemons/org.munch.stability.plist', plistlib.dumps(job))
+                if a.syslog:
+                    assert '/usr/sbin/syslogd' in manifest['files']
+                    for directory in ('/etc/asl', '/private/var/log/asl'):
+                        edit('mkdir', directory)
+                        edit('chmod', '755', directory)
+                    add_data('/etc/asl.conf', b'? [= Sender munch-probe] file /var/log/munch-syslog.log format=raw mode=0644\n')
+                    add_data('/etc/syslog.conf', b'# MUNCH: ASL configuration handles the local probe.\n')
+                    job = {'Label': 'com.apple.syslogd', 'ProgramArguments': ['/usr/sbin/syslogd', '-d', '/dev/console'],
+                           'UserName': 'root', 'KeepAlive': True, 'RunAtLoad': True, 'ThrottleInterval': 10,
+                           'EnvironmentVariables': {'ASL_DISABLE': '1'},
+                           'MachServices': {'com.apple.system.logger': True},
+                           'Sockets': {'NetworkListener': {'SockFamily': 'Unix', 'SockType': 'dgram',
+                                                          'SockPathName': '/var/run/munch-syslog.sock', 'SockPathMode': 438}},
+                           'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}
+                    add_data('/System/Library/LaunchDaemons/com.apple.syslogd.plist', plistlib.dumps(job))
         header = image.read_bytes()[1024:1536]
         assert header[:2] == b'H+' and struct.unpack_from('>I', header, 40)[0] == 4096
         listing = edit('ls', '/sbin').stdout.decode()

@@ -2,6 +2,34 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0015 APPLE SYSLOGD PROBE READY: user says photos are fine; do not push
+for a host logging channel. Added same-restore syslogd and87-file closure
+101552464bytes. launchd job publishes logger Mach service and local Unix
+NetworkListener datagram socket. ASL config routes Sender=munch-probe to
+/var/log/munch-syslog.log. Static service variant connects/writes unique
+token, polls file and only reports success after matching token bytes.
+Expected MUNCH SYSLOG: datagram sent then daemon wrote token OK.
+Existing launchd restart/state checks retained. No external network access.
+Kernel/bootstrap unchanged. Source design checked against Apple OSS syslog
+69d8586e9a599c304e1b702a9c2830e2f78126d5 and restore binary strings.
+Image shim/out/munch-xnu-0015/testios.img,125480960bytes,SHA256
+e8ad5d86fd65f860d355a4f8db3a80ea510ab0eaed72bc83c726908521ca2a84.
+Daemon/config extraction, socket policy, service signature, boot roundtrip,
+loader host, RAM audit/cross-build/repo checks pass. No physical0015 yet.
+See docs/MUNCH_XNU_0015.md. Next: temporary boot and photo of syslog marker
+or actual syslogd diagnostics/panic. Preserve known-good0014.
+
+XNU0014 RESTART AND RAM WRITE CONFIRMED BY USER: transcribed output
+MUNCH SERVICE: RAM I/O OK pid=0x00000005 uid=0x00000000 generation=2.
+The second service process read the persisted generation byte and wrote
+its update, and the requested root UID is confirmed. This validates one
+launchd restart and RAM filesystem state across service processes. It
+is not persistent storage across reboot, nor a long-duration stress test.
+Exact heartbeat duration was not reported. Preserve0014 as checkpoint.
+Next: select a useful real system service and its dependencies/diagnostics,
+or establish a host communication channel before expanding userland.
+Hardware drivers remain unported; do not enable sweet UFS/USB/input blindly.
+
 XNU0014 LAUNCHD RESTART/RAM WRITE PROBE READY: adds tools/munch-service.S,
 a signed static service under org.munch.stability. Writes generation byte
 to /tmp/munch-service-generation, prints PID/UID/generation. First run

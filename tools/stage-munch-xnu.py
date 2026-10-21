@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select early XNU patches without sweet UFS/USB/input drivers."""
+"""Select early XNU patches with bounded read-only Munch iosroot support."""
 import argparse
 import hashlib
 import json
@@ -8,8 +8,8 @@ import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
-LAST = 83
-PATCH_NUMBERS = tuple(range(1, 28)) + (32, 82, 83)  # SHA-1 and console labels; skip UFS/write patches.
+LAST = 84
+PATCH_NUMBERS = tuple(range(1, 28)) + (32, 82, 83, 84)  # Independent Munch graphics and read-only iosroot.
 
 
 def main():
@@ -45,14 +45,14 @@ def main():
         raise ValueError("use a fresh dxb checkout: numbered patches already present")
     # All checks complete before mutating the pinned build script/patch directory.
     build.write_text(text)
-    manifest = {"device": "munch", "stage": "early-no-ufs", "last_patch": LAST, "patch_numbers": list(PATCH_NUMBERS),
+    manifest = {"device": "munch", "stage": "munch-iosroot-ro", "last_patch": LAST, "patch_numbers": list(PATCH_NUMBERS),
                 "xnu_tag": "xnu-8796.141.3", "internal_machine_config": "SWEET", "files": []}
     for file in selected:
         shutil.copy2(file, destination / file.name)
         manifest["files"].append({"name": file.name,
                                   "sha256": hashlib.sha256(file.read_bytes()).hexdigest()})
     (target / "munch-patches.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"Staged {len(PATCH_NUMBERS)} patches and {len(selected) - len(PATCH_NUMBERS)} source-provider scripts; SHA-1 included, no UFS/write patches")
+    print(f"Staged {len(PATCH_NUMBERS)} patches and {len(selected) - len(PATCH_NUMBERS)} source-provider scripts; SHA-1 included, bounded iosroot reads, no media-write path")
 
 
 if __name__ == "__main__":

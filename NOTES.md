@@ -2,6 +2,100 @@
 
 ## Local munch handoff — 2026-10-21
 
+ANDROID DUALBOOT BASELINE CONFIRMED: user formatted Data, df reports
+/dev/block/sda34 90G total/1.6G used/88G available; Android boots normally.
+iosroot remains separate16GiB. User requests proceeding to actual iOS.
+Prepared0084 independent read-only UFS port from0028 plus64-bit DMA guard,
+strict LUN0 capacity/controller/GPT CRC checks and iosroot#35 bounds. No
+WRITE opcode path; all writes EROFS. ADT live UFS register check added.
+CI allowlist1..27,32,82..84; stage munch-iosroot-ro. Build target0018 uses
+rd=ufsroot0 ufsroot=iosroot. Need CI and first physical UFS access; iosroot
+is not formatted yet, so initial root mount failure is expected after UFS
+identification. Full OS/SystemOS Apple downloads in progress in research.
+Network changed; resumed into .resume files, original prefixes retained.
+
+POST-REBOOT GPT GEOMETRY CONFIRMED: user blockdev output userdata
+96283394048 bytes, iosroot17179869184 bytes, exactly planned sizes.
+User unmounted /sdcard and /data without reported errors. Next authorized
+step: TWRP Wipe > Format Data (type yes), not Advanced Wipe, then reboot
+Recovery and inspect formatting log/new Data capacity. Do not format iosroot
+or metadata manually. Android user data loss already explicitly authorized.
+No Format Data result yet. Keep Android system partitions unchanged.
+
+MUNCH GPT SPLIT APPLIED BY USER: provided successful apply.sh output;
+all original/file hashes checked, four GPT region writes completed and final
+readback verified. Command chained adb reboot recovery. User reports TWRP
+still decrypts data; this does not validate filesystem geometry. Keys and
+F2FS were untouched, so decryptability alone is expected to remain possible.
+Need post-reboot blockdev sizes userdata/iosroot and /proc/mounts before
+Format Data. Do not rerun old GPT apply script, boot Android or write iosroot
+while old oversized F2FS may be mounted. No Format Data reported yet.
+
+MUNCH GPT VALIDATED / SPLIT READY: ../munch-gpt-head.bin and tail.bin
+contain1MiB binary plus85bytes dd statistics; recognized trailer ignored.
+Primary/backup headers and arrays CRC verified, entries identical. sda
+30650368 logical4096 blocks; usable6..30650362;64entries128bytes.
+userdata#34 starts2949120,end30650362. Offline plan changes only its end
+to26455807 and adds#35 iosroot26455808..30650111,exact16GiB,1MiB aligned.
+Leaves251usable blocks after iosroot. All original33 partition extents,
+userdata start/type/GUID/attributes and disk GUID unchanged. Generated
+research/munch/dualboot-16g/{plan.json,apply.sh,*bin}, originals retained.
+Generator tools/munch-plan-gpt.py validates captures and exactgeometry;
+apply script root/munch/size/mount/hash guards, writes backup GPT first in write
+order (backup array/header then primary array/header), verifies all reads.
+No GPT changes executed by agent. User authorized data loss/no backup.
+Next user: unmount sdcard/data/metadata in TWRP; push directory to /tmp;
+run apply.sh --apply then immediately reboot recovery. Inspect new sda34/35
+sizes BEFORE Format Data. Old userdata F2FS must not be mounted afterward.
+If any script error do not format or boot Android; preserve recovery.
+
+USER WAIVES USERDATA BACKUP: says Android installed today and requests
+proceeding without backup. Accept loss of current Android data; do not keep
+asking for PC backup space or require a userdata backup. Preserve Android
+system partitions and allocate16GiB iosroot. Still need actual GPT bytes
+before concrete edits: read first/last1MiB of sda via Windows ADB (not a
+userdata backup), verify primary/backup CRCs and bounds. No edits executed.
+Previous backup preparation below is superseded and optional.
+
+MUNCH STORAGE REPORT RECEIVED: ../munch-storage.txt. TWRP3.7.1, slot_b,
+/data and /sdcard mounted f2fs via dm-6, metadata mounted ext4 sda18.
+FBE v2 wrappedkey_v0 plus metadata encryption; used15479520KiB (~14.8GiB).
+userdata=sda34 start23592960,size221609944 in512-byte sysfs sectors;
+sda size245202944 sectors, native4096-byte blocks. No sgdisk/fdisk/blkid
+in recovery, so GPT fields/CRCs still not inspected. tools/munch-backup.py
+prepared for Windows Python root ADB: requires unmounted data/sdcard/metadata,
+checks destination space, saves first/last1MiB of all6LUNs plus userdata,
+metadata/current boot/vendor_boot/dtbo/vbmeta/persist/radio identity partitions;
+exact byte counts, SHA256 matching phone for full partition copies, manifest.
+No device writes, mount operations or partition edits. Await Windows backup
+location/free space before instructing raw copy. User-selected iosroot16GiB.
+Personal decrypted files must be copied before unmount; encrypted raw backup
+is original-geometry rollback, not a smaller-data restore guarantee.
+
+MUNCH DUAL BOOT REQUEST: user wants to preserve Android, backs up data,
+and selects16 GiB for iOS. Supersedes the overwrite-userdata plan for Munch.
+No Munch GPT/partition inventory or userdata backup is present in stock
+extracted images. Do not reuse old Sweet geometry from notes below.
+Prepared tools/munch-storage-report.sh: root/munch guards, read-only sysfs,
+GPT print if available, mount/space/encryption/fstab/tool inventory. User
+must run through Windows ADB inside TWRP; WSL USB unavailable. Script
+push goes only to recovery /tmp; report goes to PC then workspace parent.
+Next: inspect report, prepare exact PC backup commands and aligned16GiB
+partition proposal. No disk edits, formatting or destructive approval yet.
+See docs/MUNCH_DUALBOOT.md. Preserve0017 graphics checkpoint. User prioritizes
+actual iOS system/rootfs startup over additional isolated graphics probes.
+
+XNU0017 GRAPHICS CONFIRMED ON PHONE: user reports changing colors.
+This confirms that the dynamic graphics probe reaches its drawing loop,
+finds/opens AppleCLCD, obtains/maps the default IOSurface, validates native
+geometry and writes pixels visible on the inherited ABL display. The loop
+locks/unlocks the surface; continuing color changes demonstrate repeated
+iterations. Exact console markers and duration were not reported.
+Preserve0017/testios.img as the graphics checkpoint alongside0014.
+This establishes CPU framebuffer rendering, not GPU acceleration, touch,
+WindowServer or SpringBoard. Next graphics step: exercise offscreen surface
+creation and framebuffer swap before attempting a system compositor.
+
 XNU0017 LC_MAIN FIX READY: user photo ../5388958027244839062.jpg
 shows dyld[3] main executable is missing LC_MAIN, graphics job exits before
 its code runs. Cat job succeeds. No IOSurface runtime result yet. Our

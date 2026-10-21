@@ -23,3 +23,11 @@ No phone result yet. Expected output and failure stages follow XNU0016.
 Build with tools/build-munch-graphics.sh, the XNU0016 root recipe using
 0017 paths, and shim/munch/build-xnu.sh with the same CI kernel.
 Temporary boot only: fastboot boot testios.img. Preserve0014.
+
+## Phone result
+
+The user reports that the colors change. This confirms execution through
+the dynamic IOKit/IOSurface mapping and repeated drawing loop on the phone.
+The probe validates1080x2400/stride4320 before drawing. Exact console text
+and test duration were not supplied. Preserve0017 as the graphics baseline.
+GPU acceleration, offscreen swaps and system compositors remain untested.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build CPU0-only, no-UFS early XNU ADT after checking munch live FDT RAM.
+"""Build CPU0-only XNU ADT with bounded Munch iosroot support after checking munch live FDT RAM.
 
 Usage: python3 tools/mkmunchadt.py LIVE.dtb OUT.adt
 Requires fdtget (dtc package). Does not read/write a connected phone.
@@ -100,7 +100,10 @@ def build():
     mkadt.SWEET_ECID = 0x4d554e4348000001  # synthetic MUNCH, never a device ID
     mkadt.BOOT_MANIFEST_HASH = hashlib.sha384(b"munch early boot manifest").digest()
     root = mkadt.build()
-    root.children = [n for n in root.children if n.name not in ("sweet-ufs", "product")]
+    root.children = [n for n in root.children if n.name not in ("product",)]
+    for child in root.children:
+        if child.name == "sweet-ufs":
+            setprop(child, "name", mkadt.cstr("munch-ufs"))
     for node in root.children:
         if node.name == "cpus":
             node.children = node.children[:1]
@@ -128,10 +131,12 @@ def main():
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
     audit(args.dtb)
+    regs = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), '/soc/ufshc@1d84000', 'reg']).split()
+    assert [int(v, 16) for v in regs] == [0x1d84000, 0x3000, 0x1d90000, 0x8000], "unexpected live UFS MMIO"
     data = build()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(data)
-    print(f"{args.output}: {len(data)} bytes, CPU0 only, virtual IRQ27, no UFS node")
+    print(f"{args.output}: {len(data)} bytes, CPU0 only, virtual IRQ27, read-only iosroot controller node")
 
 
 if __name__ == "__main__":

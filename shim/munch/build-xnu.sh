@@ -8,7 +8,7 @@ kernel=$(realpath "$1")
 live_dtb=$(realpath "$2")
 init_ramdisk=$(realpath "$3")
 cd "$(dirname "$0")/.."
-out=out/munch-xnu-0018
+out=out/munch-xnu-0019
 mkdir -p "$out"
 python3 - "$kernel" <<'PY'
 from pathlib import Path
@@ -20,18 +20,18 @@ assert hashlib.sha256(b).hexdigest() == expected, 'kernel checksum mismatch'
 magic, cpu, subtype = struct.unpack_from('<III', b)
 assert magic == 0xfeedfacf and cpu == 0x0100000c and subtype & 0xffffff in (0, 1)
 manifest = json.loads((p.parent / 'munch-patches.json').read_text())
-assert manifest['stage'] == 'munch-iosroot-ro' and manifest['last_patch'] == 84
+assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 86
 repo = Path.cwd().parent
 for item in manifest['files']:
-    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84)
+    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86)
     assert hashlib.sha256((repo / 'xnu/patches' / item['name']).read_bytes()).hexdigest() == item['sha256']
-assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84]
-print('Verified bounded iosroot read-only ARM64 CI kernel:', expected)
+assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86]
+print('Verified bounded iosroot full-root ARM64 CI kernel:', expected)
 PY
 python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
 python3 ../tools/mkpayload.py "$kernel" "$out/munch.adt" "$out/payload.bin" \
     --ramdisk "$init_ramdisk" \
-    --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot unentitled_ios_sim_launch=1 launchd_log_serial=1' > "$out/payload-info.txt"
+    --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1 launchd_log_serial=1' > "$out/payload-info.txt"
 flags=(-O2 -ffreestanding -nostdlib -fno-pic -fno-pie -mgeneral-regs-only
     -mstrict-align -fno-stack-protector -Wall -Wextra -Werror -I. -Imunch -DMUNCH_XNU=1)
 objects=()

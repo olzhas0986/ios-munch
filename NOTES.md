@@ -2,6 +2,23 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0012 HARDWARE: ../5386382558695726529.jpg confirms original Apple
+launchd asPID1, libignition, Darwin Bootstrapper, restore boot tasks.
+Fatal: unable to resolve 'mobile':114 specified username does not exist;
+PID1 exit namespace7/subcode1 then panic. No managed-service marker.
+Root remount syscall result is outside photo; do not claim observed success.
+XNU0013 adds same-restore /etc/master.passwd(mode0600), /etc/group and
+derived passwd (7 fields, passwords hidden). Includes mobile UID/GID501
+and full restore accounts. Sources ignored research/munch/restore-accounts.
+Builder validates root/mobile record IDs, compares inserted source bytes,
+mode and generated passwd. Kernel/Apple executables/PID1 unchanged.
+Image shim/out/munch-xnu-0013/testios.img,125480960bytes,SHA256
+59e38e1e3fa11471cbbe1675ae61555eb2224f5e0aab25a1bfad66a8cb7b4561.
+Loader host scenarios, boot roundtrip, account extraction/permissions,
+RAM audit/cross-build/repo checks pass. See docs/MUNCH_XNU_0013.md.
+Next: temporary boot and launchd account lookup/service marker or panic.
+No physical0013 result yet. Preserve working0011 and raw stock dumps.
+
 XNU0012 APPLE LAUNCHD PROBE READY: static PID1 reads HFS marker, attempts
 RAM root MNT_UPDATE to writable, prints syscall result, dup2 console and
 execs original Apple launchd as PID1 at /usr/libexec/munch-launchd.

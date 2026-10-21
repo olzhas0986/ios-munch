@@ -17,7 +17,7 @@ void exc_handler(uint64_t slot, uint64_t *regs)
 {
     (void)regs;
     con_clear(BLUE);
-    con_str("MUNCH", "XNU 0017 SHIM EXCEPTION");
+    con_str("MUNCH", "XNU 0018 SHIM EXCEPTION");
     con_hex("SLOT", slot);
     con_hex("ESR", reg("esr_el1"));
     con_hex("ELR", reg("elr_el1"));
@@ -29,7 +29,7 @@ void shim_main(uintptr_t dtb)
 {
     if (!munch_splash_allowed((void *)dtb, 4U * 1024U * 1024U)) stop();
     con_clear(0xff102030);
-    con_str("MUNCH", "XNU 0017 CPU0 HANDOFF");
+    con_str("MUNCH", "XNU 0018 CPU0 HANDOFF");
     con_hex("DTB", dtb);
     con_hex("SHIM", (uintptr_t)shim_main);
     if ((reg("CurrentEL") >> 2) != 1 || (reg("sctlr_el1") & 5)) {

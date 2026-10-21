@@ -80,6 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           test ! -e dxb/xnu/bsd/dev/sweet_ufs.c
+          test -f dxb/xnu/bsd/dev/munch_ufs.c
           mkdir -p out
           cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet out/
           cp dxb/munch-patches.json out/

@@ -18,4 +18,8 @@
   into the existing `userdata` partition (no GPT changes). Keep bootloaders,
   recovery, modem, persist and the backups intact, and confirm each
   destructive step with the user before running it.
+- Current Munch storage decision (2026-10-21): preserve Android and plan
+  dual boot with a separate 16 GiB iosroot. This supersedes overwriting
+  userdata for Munch. Collect actual Munch GPT/geometry and verify PC backups
+  before proposing edits; upstream Sweet geometry must not be reused.
 - Keep device dumps, serial numbers and downloaded Apple artifacts out of git.

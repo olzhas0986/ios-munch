@@ -2,6 +2,20 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0010 HARDWARE: ../5388958027244838697.jpg confirms PID1/HFS success,
+then child PID2 wait status0x00000009 (SIGKILL), EXC_CORPSE_NOTIFY delivery
+error5, no cat marker. PID1 heartbeat continues. Exit-reason code not shown.
+Offline verified cat platform2/iOS; kernel XNU_TARGET_OS_OSX kern_exec.c
+requires spawn platform attrs or DEVELOPMENT unentitled_ios_sim_launch.
+This matches upstream notes' WRONG_PLATFORM boundary but the specific
+SIGKILL reason is still a hypothesis until runtime confirmation.
+XNU0011 adds unentitled_ios_sim_launch=1, same kernel/root, output:
+shim/out/munch-xnu-0011/testios.img,33206272bytes,SHA256
+28cfdb92accbf27dfc2b0aaaab5e6a2e1f13495615c187c92800efcda075513f.
+Boot roundtrip/argument, cross-build, RAM audit, loader host and repo checks
+pass. See docs/MUNCH_XNU_0011.md. No physical0011 yet; next temporary boot
+and Allowing spawn / dyld error / child status / panic photo.
+
 XNU0010 APPLE DYLD TEST READY: extracted official restore /bin/cat, dyld
 and dependency closure (38 plain ARM64 Mach-Os,10472448bytes), all strong
 deps present, missing only weak /usr/local/lib/libobjc-env.dylib.

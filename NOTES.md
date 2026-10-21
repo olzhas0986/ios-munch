@@ -2,6 +2,19 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0006 IMAGE READY: CI run39579078956 completed successfully, commit
+96fba8b65f0a17c30181fdc2df5a6b86f06cc4fc. Kernel artifact12335717511,
+local research/munch/xnu-run-39579078956/kernel.development.sweet,
+SHA256 90399777a86c0835c1d526d791134193709bddc58983c9c24eb704a890954e06.
+Manifest and SHA256SUMS verified. Portable SHA1 wrapper passed 65 hashlib
+comparisons. Built shim/out/munch-xnu-0006/testios.img, 16429056 bytes,
+SHA256 2179a30d7d1afbf620913cb4a4bb74aae4623e943c926636efeaf1466cdcb8ed.
+Boot-v3 Image/payload roundtrip and loader host test (five prefixes, full
+segment/BSS/ADT/boot-args checks, eight malformed inputs) passed. RAM audit
+and warnings-as-errors cross-build passed. See docs/MUNCH_XNU_0006.md.
+Next: user temporary fastboot boot of 0006 and full-screen photo.
+No physical 0006 result yet; the SHA1 fix is not yet confirmed on hardware.
+
 XNU0006 PREPARED: exact allowlist 0001..0027 plus 0032 adds portable
 SHA-1 for platform UUID generation; patches 0028..0031 stay excluded.
 0032 applies cleanly after our early set. Existing pinned BearSSL provider

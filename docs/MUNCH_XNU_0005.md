@@ -12,7 +12,7 @@ sweet UFS, USB and input drivers are absent.
 
 ## Boot image
 
-Build from the extracted artifact directory and the supplied live FDT:
+Historical build command (the current script now packages XNU0006 and requires patch 0032):
 
 ```sh
 bash shim/munch/build-xnu.sh research/munch/xnu-run-39572263994/kernel.development.sweet ../live.dtb
@@ -51,7 +51,9 @@ New builds contain a fresh ADT random seed and may have different hashes.
 - Eight malformed size/count/address/entry cases failed before writes/jump.
 - RAM audit accepted the supplied live DT and rejected a wrong board,
   insufficient DDR, fixed-reservation overlap and dynamic-pool overlap.
-- Harnesses model hardware operations; XNU0005 has not booted on the phone.
+- Physical XNU0005 boot reached scheduler/debugger initialization, then
+  panicked in SHA1Init while generating the platform UUID (FAR 0x28).
+  XNU0006 adds portable SHA-1 to remove this corecrypto dependency.
   No persistent partitions are accessed by this selected kernel/shim.
 
 ## Windows CMD

@@ -2,6 +2,32 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0008 READY: same verified kernel as 0007, now with a static PID1 Mach-O
+RAMDisk. Existing mockfs serves the executable as /sbin/launchd, so HFS is
+unnecessary for this minimal test. tools/build-munch-init.sh uses GNU ARM64
+assembly, tools/munch-init.S and mkinit.build_code (shared signing/layout).
+PID1 prints MUNCH userspace/PID and a five-second heartbeat via /dev/console.
+RAMDisk PA=0x102078000, aligned size=0x8000; executable=16635 bytes.
+Build script now requires a third argument INIT_RAMDISK. Output:
+shim/out/munch-xnu-0008/testios.img, 16445440 bytes, SHA256
+13b6cfb24503dd4bbd6120f050aca413e0332a742aa36ae99381025c6fec1427.
+Verified RAMDisk ADT/segment/bounds, Mach-O entry, all code-signature page
+hashes, boot roundtrip, loader harness, RAM audit/cross-build and repo checks.
+See docs/MUNCH_XNU_0008.md. No physical 0008 result yet.
+Next: temporary fastboot boot and photo of PID1 output or panic.
+
+XNU0007 HARDWARE MILESTONE PASSED: photos ../5388958027244838606.jpg
+and ../5388958027244838604.jpg show "MUNCH CPU: boot CPU 0 registered,
+SGI1 verified, initialization complete", HFS registration, BSD startup,
+DLIL/Skywalk self-tests PASSED and virtual network threads scheduled.
+Final panic: "IOFindBSDRoot: specified root memory device, md0, has not
+been configured @IOKitBSDInit.cpp:808" (caller 0xfffffe0007a29c30).
+This is the expected no-root stop: rd=md0 is supplied but no RAMDisk segment
+or ADT RAMDisk property was packaged. CPU matching fix confirmed on hardware.
+Next phase: prepare a minimal HFS root RAMDisk and PID1, pass --ramdisk to
+mkpayload.py and verify payload bounds/RAMDisk ADT. Existing mkpayload.py
+already supports this; no UFS writes are needed. Full iOS UI is not present.
+
 XNU0007 READY: run39582602130 succeeded for f8dc7753, artifact12337967305.
 Kernel research/munch/xnu-run-39582602130/kernel.development.sweet SHA256
 cca54c9e4b782f9d50f13044378384dcaeb996e91c207f54a66e040b8c8dbd9a.
@@ -9,7 +35,7 @@ Final shim/out/munch-xnu-0007/testios.img is 16429056 bytes, SHA256
 95e6e5b2fd56d931afbda384cdd11a9c5f5050c44fbae1fdf181b20730261021.
 Replaces the earlier temporary 0007 packaging with the old kernel. Verified
 kernel MUNCH messages, manifest, CPU0 alias/reg, boot roundtrip, loader host
-scenarios and repository checks. Hardware confirmation pending.
+scenarios and repository checks. Hardware result is recorded above.
 Legacy xnu workflow also auto-triggered on patch 0082 (run39582601927);
 cancellation requested successfully. Removed its push trigger and renamed
 it Legacy upstream - manual build; Munch - early XNU remains automatic.

@@ -1,13 +1,14 @@
 #!/bin/bash
 # Package an audited early CI kernel for temporary boot; never access a phone.
 set -euo pipefail
-if [ "$#" -ne 2 ]; then
-    echo 'Usage: bash shim/munch/build-xnu.sh KERNEL LIVE.dtb' >&2; exit 2
+if [ "$#" -ne 3 ]; then
+    echo 'Usage: bash shim/munch/build-xnu.sh KERNEL LIVE.dtb INIT_RAMDISK' >&2; exit 2
 fi
 kernel=$(realpath "$1")
 live_dtb=$(realpath "$2")
+init_ramdisk=$(realpath "$3")
 cd "$(dirname "$0")/.."
-out=out/munch-xnu-0007
+out=out/munch-xnu-0008
 mkdir -p "$out"
 python3 - "$kernel" <<'PY'
 from pathlib import Path
@@ -29,6 +30,7 @@ print('Verified early no-UFS ARM64 CI kernel:', expected)
 PY
 python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
 python3 ../tools/mkpayload.py "$kernel" "$out/munch.adt" "$out/payload.bin" \
+    --ramdisk "$init_ramdisk" \
     --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=md0' > "$out/payload-info.txt"
 flags=(-O2 -ffreestanding -nostdlib -fno-pic -fno-pie -mgeneral-regs-only
     -mstrict-align -fno-stack-protector -Wall -Wextra -Werror -I. -Imunch -DMUNCH_XNU=1)

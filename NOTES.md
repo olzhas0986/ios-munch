@@ -2,6 +2,33 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0006 PREPARED: exact allowlist 0001..0027 plus 0032 adds portable
+SHA-1 for platform UUID generation; patches 0028..0031 stay excluded.
+0032 applies cleanly after our early set. Existing pinned BearSSL provider
+already stages sha1.c and big-endian codecs. Stage allowlist, repository
+validation and shell syntax pass. Packaging now requires the new manifest
+and writes shim/out/munch-xnu-0006/testios.img with matching screen ID.
+Next: CI build, artifact validation and temporary-boot image packaging.
+
+CLEARER PANIC PHOTOS: ../WIN_20261021_14_35_15_Pro.jpg,
+../WIN_20261021_14_36_29_Pro.jpg and ../WIN_20261021_14_36_42_Pro.jpg.
+PC=0xfffffe000797a250, LR=0xfffffe00079e4748,
+ESR=0x96000005, FAR=0x28. Verified kernel symbols place PC at
+SHA1Init+0x34 and LR in IOPlatformExpertDevice::generatePlatformUUID+0x10c.
+Source SHA1Init dereferences g_crypto_funcs, absent without corecrypto;
+this matches the near-null translation fault. Existing upstream patch
+0032-sweet-bearssl-sha1.patch is outside our selected 0001..0027 set.
+Next: inspect and include that SHA1 fix selectively, without enabling
+intervening UFS/write patches, then build and package the next testios.img.
+
+PHYSICAL XNU0005 BOOT OBSERVED: ../WIN_20261021_14_25_43_Pro.jpg
+shows scheduler initialization, kernel debugger setup and a CPU0
+"Kernel data abort" panic. The XNU kernel executes on the phone; this is
+not a shim-only result. Photo is blurred: exact PC/LR/ESR must be confirmed
+before claiming a symbol or root cause. Do not use guessed addresses.
+Next: recover exact panic registers, symbolize against the verified CI
+kernel and prepare a targeted fix. Original photo retained outside git.
+
 ENGLISH HISTORY REWRITE COMPLETED: fork main replaced our aggregate commit
 d97a55a with f9289c65f238b31ed1c0bb8788b9837a43cf58e7, still directly
 parented by upstream4c7cc91. All32 added/modified text files are English;
@@ -16,8 +43,8 @@ audited4..5GiB RAM and IRQ27. Boot-v3 prefix scanning/packed metadata handles
 possibly unaligned vendor ramdisk concatenation. No UFS/USB/input drivers.
 No root image yet: target is early kernel/no-root output, not iOS UI.
 Cross-build, boot roundtrip, native loader5-prefix/8-error scenarios and
-RAM audit negative cases pass. No XNU0005 physical boot yet.
-NEXT: user temporary fastboot boot and photo of the full early-XNU screen.
+RAM audit negative cases pass. Physical boot result is recorded above.
+NEXT: resolve the observed CPU0 data-abort panic described above.
 
 USER PREFERENCE: all GitHub-facing content strictly English. Recorded in
 AGENTS.md. User subsequently requested rewriting our published changes:

@@ -1008,7 +1008,7 @@
 +#define SWEET_FB_NOTIFY_VSYNC           5
 +#define SWEET_FB_VSYNC_US               16667
 +#define SWEET_FB_DOT_PITCH              395     /* ppi, 6.67" 1080x2400 */
-+#define MUNCH_FB_FORMAT_BGRA            0x42475241
++#define SWEET_FB_FORMAT_BGRA            0x42475241
 +
 +class IOMobileFramebuffer : public IOService {
 +	OSDeclareDefaultStructors(IOMobileFramebuffer);
@@ -1053,8 +1053,8 @@
 +	AppleCLCD          *fFB;
 +	task_t              fTask;
 +	mach_port_t         fPort;
-+	io_user_reference_t fFunc[MUNCH_FB_NOTIFY_TYPES];
-+	io_user_reference_t fRefcon[MUNCH_FB_NOTIFY_TYPES];
++	io_user_reference_t fFunc[SWEET_FB_NOTIFY_TYPES];
++	io_user_reference_t fRefcon[SWEET_FB_NOTIFY_TYPES];
 +
 +	bool initWithTask(task_t owningTask, void *securityID, UInt32 type) APPLE_KEXT_OVERRIDE;
 +	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
@@ -1088,7 +1088,7 @@
 +	}
 +	fLock = IOLockAlloc();
 +	fClients = OSArray::withCapacity(4);
-+	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, MUNCH_FB_FORMAT_BGRA);
++	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
 +	fPixels = fSurface != NULL ? fSurface->kernelAddress() : 0;
 +	fWorkLoop = IOWorkLoop::workLoop();
 +	if (fLock == NULL || fClients == NULL || fPixels == 0 || fWorkLoop == NULL) {
@@ -1102,7 +1102,7 @@
 +		IOLog("SWEET FB: no vsync timer\n");
 +		return false;
 +	}
-+	fVsync->setTimeoutUS(MUNCH_FB_VSYNC_US);
++	fVsync->setTimeoutUS(SWEET_FB_VSYNC_US);
 +
 +	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
 +	setProperty("external", false);
@@ -1129,10 +1129,10 @@
 +	for (unsigned int i = 0; i < fb->fClients->getCount(); i++) {
 +		IOMobileFramebufferUserClient *client =
 +		    (IOMobileFramebufferUserClient *)fb->fClients->getObject(i);
-+		client->notify(MUNCH_FB_NOTIFY_VSYNC, values, 6);
++		client->notify(SWEET_FB_NOTIFY_VSYNC, values, 6);
 +	}
 +	IOLockUnlock(fb->fLock);
-+	sender->setTimeoutUS(MUNCH_FB_VSYNC_US);
++	sender->setTimeoutUS(SWEET_FB_VSYNC_US);
 +}
 +
 +void
@@ -1180,7 +1180,7 @@
 +		}
 +	}
 +
-+	for (uint32_t layer = 0; layer < MUNCH_FB_LAYERS; layer++) {
++	for (uint32_t layer = 0; layer < SWEET_FB_LAYERS; layer++) {
 +		uint32_t id = get32(rec, 0x54 + 4 * layer);
 +		const uint8_t *a = rec + 0x64 + 16 * layer;
 +		const uint8_t *b = rec + 0xc4 + 16 * layer;
@@ -1303,7 +1303,7 @@
 +{
 +	OSAsyncReference64 ref;
 +
-+	if (type >= MUNCH_FB_NOTIFY_TYPES || fFunc[type] == 0 || fPort == MACH_PORT_NULL) {
++	if (type >= SWEET_FB_NOTIFY_TYPES || fFunc[type] == 0 || fPort == MACH_PORT_NULL) {
 +		return;
 +	}
 +	bzero(ref, sizeof(ref));
@@ -1335,9 +1335,9 @@
 +		outCount = 1;
 +		break;
 +	case kSweetFBSwapEnd: {
-+		uint8_t rec[MUNCH_FB_SWAP_REC_SIZE];
++		uint8_t rec[SWEET_FB_SWAP_REC_SIZE];
 +		if (args->structureInputDescriptor != NULL ||
-+		    args->structureInputSize < MUNCH_FB_SWAP_REC_SIZE) {
++		    args->structureInputSize < SWEET_FB_SWAP_REC_SIZE) {
 +			ret = kIOReturnBadArgument;
 +			break;
 +		}
@@ -1359,11 +1359,11 @@
 +		outCount = 1;
 +		break;
 +	case kSweetFBGetDotPitch:
-+		out[0] = MUNCH_FB_DOT_PITCH;
++		out[0] = SWEET_FB_DOT_PITCH;
 +		outCount = 1;
 +		break;
 +	case kSweetFBNotifications:
-+		if (args->scalarInputCount >= 3 && args->scalarInput[2] < MUNCH_FB_NOTIFY_TYPES) {
++		if (args->scalarInputCount >= 3 && args->scalarInput[2] < SWEET_FB_NOTIFY_TYPES) {
 +			uint32_t type = (uint32_t)args->scalarInput[2];
 +			IOLockLock(fFB->fLock);
 +			fFunc[type] = args->scalarInput[0];

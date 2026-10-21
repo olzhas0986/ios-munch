@@ -10,6 +10,7 @@
  *
  * Raw XNU syscalls: number in x16, svc #0x80, carry set on error.
  */
+#define SYS_read	3
 #define SYS_write	4
 #define SYS_open	5
 #define SYS_getpid	20
@@ -58,6 +59,36 @@ _start:
 	sub	x2, x2, x1
 	bl	write_console
 
+#ifdef MUNCH_HFS_PROBE
+	/* Read a separate catalog file: mockfs cannot provide this path. */
+	adr x0, marker_path
+	mov x1, #0
+	mov x2, #0
+	mov x16, #SYS_open
+	svc #0x80
+	b.cs marker_failed
+	mov x20, x0
+	sub sp, sp, #128
+	mov x1, sp
+	mov x2, #128
+	mov x16, #SYS_read
+	svc #0x80
+	b.cs marker_read_failed
+	cbz x0, marker_read_failed
+	mov x2, x0
+	mov x1, sp
+	bl write_console
+	add sp, sp, #128
+	b tick
+marker_read_failed:
+	add sp, sp, #128
+marker_failed:
+	adr x1, marker_error
+	adr x2, marker_error_end
+	sub x2, x2, x1
+	bl write_console
+#endif
+
 tick:
 	/* select(0, NULL, NULL, NULL, &5s) as a portable sleep */
 	mov	x0, #0
@@ -97,3 +128,11 @@ hello_tail:
 alive:
 	.ascii	"MUNCH init: still alive\n"
 alive_end:
+
+#ifdef MUNCH_HFS_PROBE
+marker_path:
+	.asciz "/etc/munch-release"
+marker_error:
+	.ascii "MUNCH HFS: marker read FAILED\n"
+marker_error_end:
+#endif

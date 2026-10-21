@@ -31,3 +31,12 @@ fastboot boot testios.img
 
 Capture the Allowing spawn of iOS binary line and subsequent child output,
 wait status, dyld error or panic. Temporary boot only.
+
+## Hardware result
+
+The user confirmed the Apple cat marker and raw wait status 0x00000000.
+This proves dynamic execution through Apple dyld/libSystem and filesystem
+read by /bin/cat. Two shared_region_check_np messages were also reported.
+The kernel source documents the failing start-address query as ENOMEM for
+an empty shared region. Standalone restore libraries allowed this test to
+complete without a shared cache. Shared-cache mapping itself is not tested.

@@ -7,7 +7,8 @@ case "${1:-mockfs}" in
     mockfs) out=shim/out/munch-init-0008 ;;
     hfs) out=shim/out/munch-init-0009; flags=(-DMUNCH_HFS_PROBE=1) ;;
     dyld) out=shim/out/munch-init-0010; flags=(-DMUNCH_HFS_PROBE=1 -DMUNCH_DYLD_PROBE=1) ;;
-    *) echo "Usage: bash tools/build-munch-init.sh [mockfs|hfs|dyld]" >&2; exit 2 ;;
+    launchd) out=shim/out/munch-init-0012; flags=(-DMUNCH_HFS_PROBE=1 -DMUNCH_LAUNCHD_PROBE=1) ;;
+    *) echo "Usage: bash tools/build-munch-init.sh [mockfs|hfs|dyld|launchd]" >&2; exit 2 ;;
 esac
 mkdir -p "$out"
 aarch64-linux-gnu-gcc -x assembler-with-cpp "${flags[@]}" -c tools/munch-init.S -o "$out/init.o"

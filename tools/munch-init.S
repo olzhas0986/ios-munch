@@ -90,6 +90,46 @@ marker_failed:
 marker_done:
 #endif
 
+#ifdef MUNCH_LAUNCHD_PROBE
+	/* Remount only our memory-backed HFS root; no phone storage driver. */
+	sub sp, sp, #64
+	stp xzr, xzr, [sp]
+	stp xzr, xzr, [sp, #16]
+	stp xzr, xzr, [sp, #32]
+	stp xzr, xzr, [sp, #48]
+	adr x0, hfs_type
+	adr x1, root_path
+	mov x2, #0x10000 /* MNT_UPDATE, without MNT_RDONLY */
+	mov x3, sp
+	mov x16, #167 /* mount */
+	svc #0x80
+	add sp, sp, #64
+	bl print_status
+	mov x0, x19
+	mov x1, #1
+	mov x16, #90
+	svc #0x80
+	mov x0, x19
+	mov x1, #2
+	mov x16, #90
+	svc #0x80
+	adr x1, launchd_message
+	adr x2, launchd_message_end
+	sub x2, x2, x1
+	bl write_console
+	sub sp, sp, #32
+	adr x0, launchd_path
+	str x0, [sp]
+	str xzr, [sp, #8]
+	mov x1, sp
+	mov x2, #0
+	mov x16, #59
+	svc #0x80
+	add sp, sp, #32
+	bl print_status
+	b tick
+#endif
+
 #ifdef MUNCH_DYLD_PROBE
 	mov x21, #0
 	mov x0, x19
@@ -199,7 +239,7 @@ marker_error:
 marker_error_end:
 #endif
 
-#ifdef MUNCH_DYLD_PROBE
+#if defined(MUNCH_DYLD_PROBE) || defined(MUNCH_LAUNCHD_PROBE)
 /* Report raw wait status without libc; exit(0) is 00000000. */
 	.p2align 2
 print_status:
@@ -241,8 +281,24 @@ exec_error:
 	.ascii "MUNCH DYLD: execve FAILED\n"
 exec_error_end:
 status_text:
+#ifdef MUNCH_LAUNCHD_PROBE
+	.ascii "MUNCH LAUNCHD: syscall result 0x"
+#else
 	.ascii "MUNCH DYLD: child wait status 0x"
+#endif
 status_text_end:
 hex_digits:
 	.ascii "0123456789abcdef"
+#endif
+
+#ifdef MUNCH_LAUNCHD_PROBE
+hfs_type:
+	.asciz "hfs"
+root_path:
+	.asciz "/"
+launchd_path:
+	.asciz "/usr/libexec/munch-launchd"
+launchd_message:
+	.ascii "MUNCH LAUNCHD: exec Apple launchd as PID 1\n"
+launchd_message_end:
 #endif

@@ -2,6 +2,37 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0012 APPLE LAUNCHD PROBE READY: static PID1 reads HFS marker, attempts
+RAM root MNT_UPDATE to writable, prints syscall result, dup2 console and
+execs original Apple launchd as PID1 at /usr/libexec/munch-launchd.
+On successful exec static wrapper is replaced; a launchd exit can panic.
+A child launchd would not validate PID1 bootstrap, hence this design.
+Root104MiB includes launchd/xpcproxy +86-file closure101385616bytes,
+restore SystemVersion.plist, runtime dirs, /var symlink, root account and
+one custom LaunchDaemon running cat. Expected managed-service marker:
+MUNCH LAUNCHD: managed service ran OK. No success claim before hardware.
+Kernel unchanged, boot args add launchd_log_serial=1. Working0011 preserved.
+Image shim/out/munch-xnu-0012/testios.img,125480960bytes,SHA256
+54727150d08fe695ab367c4e8954ccc0e78dcbe0e8b7404cd9d5e2448cd44104.
+RAM root free5705728bytes; payload below128MiB profile. File/config extraction
+checks, dependencies, job plist, bounds/boot roundtrip, loader host using
+256MiB fixture (research/munch/loader-host-0012.c), repo/cross-build pass.
+See docs/MUNCH_XNU_0012.md. Next: temporary boot, mount result and launchd
+console/service marker or panic. No physical0012 yet.
+
+XNU0011 APPLE DYLD SUCCESS CONFIRMED BY USER: reports
+"MUNCH DYLD: Apple cat read this file OK" and child wait status0x00000000.
+Apple dyld/libSystem and /bin/cat execute successfully; static PID1 remains.
+Two shared_region_check_np vm_shared_region_start_address() failed lines
+are reported. Source bsd/vm/vm_unix.c:2052..2128 documents this as ENOMEM
+for an empty shared region during dyld's cache probe. The restore root has
+standalone libraries and no shared cache; successful cat proves fallback
+worked for this test. This does not validate shared-cache mapping itself.
+The DEVELOPMENT iOS launch boot argument passed the previous SIGKILL
+boundary. Preserve 0011 as the dynamic-userland working checkpoint.
+Next phase: supervised Apple launchd/system-service probe and required
+root layout; do not replace the known-working PID1 until diagnostics exist.
+
 XNU0010 HARDWARE: ../5388958027244838697.jpg confirms PID1/HFS success,
 then child PID2 wait status0x00000009 (SIGKILL), EXC_CORPSE_NOTIFY delivery
 error5, no cat marker. PID1 heartbeat continues. Exit-reason code not shown.

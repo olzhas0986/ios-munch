@@ -2,6 +2,31 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0007 PREPARATION: user confirms XNU0006 screen unchanged for five minutes.
+Found deterministic CPU binding mismatch: munch ADT removed qcom,kryo470,
+but the compiled SweetCPU personality matches only that compatible alias.
+Restored that generic-driver alias after qcom,kryo585; CPU0 reg remains 0.
+User also requests replacing SWEET mentions with MUNCH. Patch 0082 changes
+28 kernel string literals (logs/panics), preserving internal identifiers.
+Selected patches are now exactly 0001..0027, 0032, 0082, no intervening UFS
+or write patches. Patch applicability, staging allowlist, ADT binding and
+repository checks pass. Rebuild required for labels; packaging targets
+shim/out/munch-xnu-0007/testios.img. Previous local 0007 built with old kernel
+is superseded and must not be provided to the user.
+Next: publish and build kernel, package 0007 and request temporary boot.
+
+PHYSICAL XNU0006 PROGRESS: user attached 5388958027244838587.jpg.
+Readable output passes the previous SHA1 panic, registers HMAC-SHA256 PRNG,
+libpthread and AMFI interfaces, loads vnode policy, then prints
+"SWEET: starting device-tree platform expert" and
+"SWEET: platform expert registered". No panic is visible in this photo.
+Older VM/zone lines below are retained framebuffer content, not proof of
+later execution. Duration of the final screen is not yet confirmed.
+Next: confirm whether output remains unchanged, then trace IOKit CPU
+matching/registration and bootstrap completion; do not infer a root-mount
+failure or IRQ failure from the photo alone. Timer INTID is ADT-overridable
+in pe_fiq.c, so the SWEET.h default of 19 alone is not evidence of a bug.
+
 XNU0006 IMAGE READY: CI run39579078956 completed successfully, commit
 96fba8b65f0a17c30181fdc2df5a6b86f06cc4fc. Kernel artifact12335717511,
 local research/munch/xnu-run-39579078956/kernel.development.sweet,

@@ -104,7 +104,11 @@ def build():
     for node in root.children:
         if node.name == "cpus":
             node.children = node.children[:1]
-            setprop(node.children[0], "compatible", mkadt.cstr("qcom,kryo") + mkadt.cstr("ARM,v8"))
+            # The current generic IOCPU driver matches this legacy alias.
+            # Keep the munch CPU identity first, as with the root PE alias.
+            setprop(node.children[0], "compatible",
+                    mkadt.cstr("qcom,kryo585") + mkadt.cstr("qcom,kryo470") +
+                    mkadt.cstr("qcom,kryo") + mkadt.cstr("ARM,v8"))
         elif node.name == "chosen":
             setprop(node, "firmware-version", mkadt.cstr("munch-early-shim"))
             setprop(node, "system-firmware-version", mkadt.cstr("munch-early-shim"))

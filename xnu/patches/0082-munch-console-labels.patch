@@ -1,0 +1,249 @@
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -99,7 +99,7 @@
+ 		}
+ 	}
+ 	__asm__ volatile("dsb sy" ::: "memory");
+-	sweet_early_string("SWEET EARLY ");
++	sweet_early_string("MUNCH EARLY ");
+ 	if (stage >= 10) {
+ 		sweet_early_putc((char)('0' + stage / 10));
+ 	}
+@@ -116,7 +116,7 @@
+ 		return;
+ 	}
+ 	early_panicking = 1;
+-	sweet_early_string("\nSWEET EARLY PANIC: ");
++	sweet_early_string("\nMUNCH EARLY PANIC: ");
+ 	va_list copy;
+ 	va_copy(copy, *args);
+ 	_doprnt(fmt, &copy, sweet_early_putc, 16);
+--- a/osfmk/prng/prng_random.c
++++ b/osfmk/prng/prng_random.c
+@@ -177,7 +177,7 @@
+ sweet_prng_check(int status)
+ {
+ 	if (status != CCDRBG_STATUS_OK) {
+-		panic("SWEET HMAC DRBG error %d", status);
++		panic("MUNCH HMAC DRBG error %d", status);
+ 	}
+ }
+ 
+@@ -236,7 +236,7 @@
+ 	size_t nbytes = sizeof(entropy);
+ 	int32_t nsamples = sweet_getentropy(&nbytes, entropy, sweet_getentropy_arg);
+ 	if (nsamples < 0) {
+-		panic("SWEET PRNG entropy health test failed");
++		panic("MUNCH PRNG entropy health test failed");
+ 	}
+ 	if (nsamples >= 256) {
+ 		assert(nbytes >= SEED_SIZE && nbytes <= sizeof(entropy));
+@@ -274,7 +274,7 @@
+ 		.init_with_getentropy = sweet_prng_init_with_getentropy,
+ 	};
+ 	register_and_init_prng(&sweet_prng_ctx, &funcs);
+-	kprintf("SWEET PRNG: HMAC-SHA256 registered\n");
++	kprintf("MUNCH PRNG: HMAC-SHA256 registered\n");
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_FIRST, sweet_prng_startup);
+ #endif /* SWEET */
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -116,7 +116,7 @@
+ 			}
+ 			sweet_vtimer_intid = intid;
+ 		}
+-		kprintf("SWEET GIC: virtual timer INTID %u\n", sweet_vtimer_intid);
++		kprintf("MUNCH GIC: virtual timer INTID %u\n", sweet_vtimer_intid);
+ #endif
+ 
+ 		vm_offset_t soc_base_phys = pe_arm_get_soc_base_phys();
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -47,7 +47,7 @@
+ 		return false;
+ 	}
+ 	if (topology->num_cpus != 1) {
+-		panic("SWEET CPU: only single-CPU bring-up is supported");
++		panic("MUNCH CPU: only single-CPU bring-up is supported");
+ 	}
+ 	if (!IOCPU::start(provider)) {
+ 		return false;
+@@ -71,16 +71,16 @@
+ 	perfmon_interrupt_handler_func pmi_handler = NULL;
+ 	kern_return_t result = ml_processor_register(&info, &machProcessor, &ipi_handler, &pmi_handler);
+ 	if (result != KERN_SUCCESS) {
+-		panic("SWEET CPU: ml_processor_register failed: %d", result);
++		panic("MUNCH CPU: ml_processor_register failed: %d", result);
+ 	}
+ 	if (pmi_handler != NULL) {
+-		panic("SWEET CPU: PMI routing is not implemented");
++		panic("MUNCH CPU: PMI routing is not implemented");
+ 	}
+ 
+ 	/* Re-enter the boot CPU through cpu_machine_init -> PE_cpu_machine_init. */
+ 	result = processor_start(machProcessor);
+ 	if (result != KERN_SUCCESS || getCPUState() != kIOCPUStateRunning) {
+-		panic("SWEET CPU: processor_start failed: %d", result);
++		panic("MUNCH CPU: processor_start failed: %d", result);
+ 	}
+ 	ml_cpu_init_completed();
+ 	cpusRunning();
+@@ -89,7 +89,7 @@
+ 
+ 	/* Announce completion only after registration, startup and SGI validation. */
+ 	ml_set_max_cpus(topology->max_cpu_id + 1);
+-	IOLog("SWEET CPU: boot CPU %u registered, SGI1 verified, initialization complete\n",
++	IOLog("MUNCH CPU: boot CPU %u registered, SGI1 verified, initialization complete\n",
+ 	    getCPUNumber());
+ 	return true;
+ }
+@@ -105,7 +105,7 @@
+ SweetCPU::initCPU(bool boot)
+ {
+ 	if (!boot) {
+-		panic("SWEET CPU: resume is not implemented");
++		panic("MUNCH CPU: resume is not implemented");
+ 	}
+ 	assert(cpu_number() == (int)getCPUNumber());
+ 	assert(ml_get_interrupts_enabled());
+@@ -117,7 +117,7 @@
+ 	signalCPU(this);
+ 	while (!ml_cpu_signal_is_enabled()) {
+ 		if (mach_absolute_time() > deadline) {
+-			panic("SWEET CPU: SGI1 self-test timed out");
++			panic("MUNCH CPU: SGI1 self-test timed out");
+ 		}
+ 		__asm__ volatile("yield");
+ 	}
+@@ -129,12 +129,12 @@
+ {
+ 	/* Only the boot CPU is registered by this driver. */
+ 	if (target != this || cpu_number() != (int)getCPUNumber()) {
+-		panic("SWEET CPU: secondary CPU signalling is not implemented");
++		panic("MUNCH CPU: secondary CPU signalling is not implemented");
+ 	}
+ 	uint64_t mpidr = __builtin_arm_rsr64("MPIDR_EL1");
+ 	unsigned int aff0 = mpidr & 0xff;
+ 	if (aff0 >= 16) {
+-		panic("SWEET CPU: SGI target requires unsupported range selector");
++		panic("MUNCH CPU: SGI target requires unsupported range selector");
+ 	}
+ 	uint64_t sgi = (((mpidr >> 32) & 0xff) << 48) |
+ 	    (((mpidr >> 16) & 0xff) << 32) |
+@@ -154,13 +154,13 @@
+ void
+ SweetCPU::quiesceCPU(void)
+ {
+-	panic("SWEET CPU: CPU quiesce is not implemented");
++	panic("MUNCH CPU: CPU quiesce is not implemented");
+ }
+ 
+ void
+ SweetCPU::haltCPU(void)
+ {
+-	panic("SWEET CPU: CPU halt/suspend is not implemented");
++	panic("MUNCH CPU: CPU halt/suspend is not implemented");
+ }
+ 
+ const OSSymbol *
+--- a/iokit/Kernel/arm/SweetPlatformExpert.cpp
++++ b/iokit/Kernel/arm/SweetPlatformExpert.cpp
+@@ -27,12 +27,12 @@
+ bool
+ SweetPlatformExpert::start(IOService *provider)
+ {
+-	IOLog("SWEET: starting device-tree platform expert\n");
++	IOLog("MUNCH: starting device-tree platform expert\n");
+ 	if (!IODTPlatformExpert::start(provider)) {
+ 		return false;
+ 	}
+ 	registerService();
+-	IOLog("SWEET: platform expert registered\n");
++	IOLog("MUNCH: platform expert registered\n");
+ 	return true;
+ }
+ 
+--- a/bsd/kern/kern_trustcache.c
++++ b/bsd/kern/kern_trustcache.c
+@@ -258,7 +258,7 @@
+ 	if (img4if == NULL || amfi == NULL) {
+ 		trust_cache_rt = NULL;
+ 		trust_cache_mut_rt = NULL;
+-		printf("SWEET: trust caches unavailable (Image4/AMFI not installed)\n");
++		printf("MUNCH: trust caches unavailable (Image4/AMFI not installed)\n");
+ 		return;
+ 	}
+ #endif
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -40,7 +40,7 @@
+     __unused uint8_t cdhash[CS_CDHASH_LEN], __unused CEQuery_t query,
+     __unused size_t query_length)
+ {
+-	panic("SWEET AMFI: CoreEntitlements queries are not implemented");
++	panic("MUNCH AMFI: CoreEntitlements queries are not implemented");
+ }
+ 
+ static bool
+@@ -73,7 +73,7 @@
+ static void *
+ sweet_amfi_query_context_to_object(__unused CEQueryContext_t ctx)
+ {
+-	panic("SWEET AMFI: CoreEntitlements query contexts are not implemented");
++	panic("MUNCH AMFI: CoreEntitlements query contexts are not implemented");
+ }
+ 
+ static kern_return_t
+@@ -170,7 +170,7 @@
+ sweet_amfi_register(void)
+ {
+ 	amfi_interface_register(&sweet_amfi);
+-	printf("SWEET AMFI: built-in interface registered (no entitlements)\n");
++	printf("MUNCH AMFI: built-in interface registered (no entitlements)\n");
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_MIDDLE, sweet_amfi_register);
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+--- a/bsd/pthread/sweet_pthread_init.c
++++ b/bsd/pthread/sweet_pthread_init.c
+@@ -5,7 +5,7 @@
+ 
+ /* Keep the provider's full layout within the kernel's reserved storage. */
+ _Static_assert(sizeof(struct ksyn_waitq_element) == 56,
+-    "update SWEET ksyn storage in sys/pthread_internal.h");
++    "update MUNCH ksyn storage in sys/pthread_internal.h");
+ 
+ /* Restore the startup interface after compiling the provider's kext code. */
+ #define XNU_KERNEL_PRIVATE 1
+@@ -18,9 +18,9 @@
+ {
+     kern_return_t kr = sweet_pthread_start(NULL, NULL);
+     if (kr != KERN_SUCCESS || sweet_pthread_kern == NULL) {
+-        panic("SWEET: pthread provider registration failed: %d", kr);
++        panic("MUNCH: pthread provider registration failed: %d", kr);
+     }
+-    kprintf("SWEET pthread: libpthread-514.100.2 registered\n");
++    kprintf("MUNCH pthread: libpthread-514.100.2 registered\n");
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_SECOND, sweet_pthread_register);
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+--- a/bsd/sweet_hfs/sweet_hfs_iokit.c
++++ b/bsd/sweet_hfs/sweet_hfs_iokit.c
+@@ -80,7 +80,7 @@
+ 
+ 	int ret = vfs_fsadd(&vfe, &sweet_hfs_vfs_handle);
+ 	if (ret) {
+-		panic("SWEET HFS: vfs_fsadd failed: %d", ret);
++		panic("MUNCH HFS: vfs_fsadd failed: %d", ret);
+ 	}
+ 
+ 	hfs_init_zones();
+@@ -98,7 +98,7 @@
+ 		}
+ 	}
+ 
+-	printf("SWEET HFS: hfs-627.100.6 registered\n");
++	printf("MUNCH HFS: hfs-627.100.6 registered\n");
+ }
+ 
+ /* Built in, not a loadable kext: there is no kext to retain per mount. */

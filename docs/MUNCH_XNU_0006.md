@@ -25,7 +25,10 @@ Boot-v3 roundtrip and the loader host harness passed with the new payload.
 
 The loader, CPU0-only ADT, 4..5 GiB RAM audit and temporary boot procedure
 are described in MUNCH_XNU_0005.md. No root RAMDisk is supplied yet.
-The new shim screen identifies itself as XNU 0006. Physical testing is pending.
+The new shim screen identifies itself as XNU 0006. Physical testing reached PRNG/libpthread/AMFI registration and
+`SWEET: platform expert registered`, passing the previous SHA1 panic.
+No panic is visible in the supplied photo. Further progress and whether
+this screen is a persistent stop remain to be established.
 
 ```sh
 bash shim/munch/build-xnu.sh research/munch/xnu-run-39579078956/kernel.development.sweet ../live.dtb

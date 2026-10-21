@@ -2,6 +2,20 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0017 LC_MAIN FIX READY: user photo ../5388958027244839062.jpg
+shows dyld[3] main executable is missing LC_MAIN, graphics job exits before
+its code runs. Cat job succeeds. No IOSurface runtime result yet. Our
+LC_UNIXTHREAD-only dynamic probe was incompatible with this iOS dyld;
+source dyld/dyldMain.cpp confirms its legacy startup path is disabled.
+Replaced thread command with LC_MAIN entryoff0x800; rebuilt root and image
+using unchanged successful CI39615713929 kernel. Image
+shim/out/munch-xnu-0017/testios.img,125538304bytes,SHA256
+049d0ed6a539f9b5b71f343ca75e00a8b33c6c8c2dc255edd683dfc425d7cb5c.
+All12 actual library imports, LC_MAIN offset/no thread command, signature
+page hashes, boot-v3 roundtrip, memory audit and loader host tests pass.
+Next: temporary boot0017; expected mapped line/changing bands or error stage.
+No physical0017 result yet. Preserve0016 evidence and working0014.
+
 XNU0016 GRAPHICS IMAGE READY: CI39615713929 succeeded from3784107.
 Kernel SHA256fff602fc743d5169bb63756fba98733647443d44bb45887b6e952a5af1b36f0c.
 Image shim/out/munch-xnu-0016/testios.img,125538304bytes,SHA256

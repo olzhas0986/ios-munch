@@ -51,15 +51,14 @@ def build(code):
     sig_size = len(mkinit.code_signature(bytes(sig_off), sig_off, PAGE))
     section = struct.pack('<16s16sQQIIIIIIII', b'__text', b'__TEXT', BASE + CODE_OFF,
                           len(code), CODE_OFF, 2, 0, 0, mkinit.S_ATTR_CODE, 0, 0, 0)
-    state = [0] * 33
-    state[32] = BASE + CODE_OFF
-    thread = struct.pack('<4I', 5, 288, 6, 68) + struct.pack('<33QII', *state, 0, 0)
+    # iOS dyld invokes main after library initialization and requires LC_MAIN.
+    entry = struct.pack('<IIQQ', 0x80000028, 24, CODE_OFF, 0)
     commands = [mkinit.segment('__PAGEZERO', 0, BASE, 0, 0, 0),
                 mkinit.segment('__TEXT', BASE, PAGE, 0, PAGE, 5, [section]),
                 mkinit.segment('__DATA', BASE + PAGE, PAGE, PAGE, PAGE, 3),
                 mkinit.segment('__LINKEDIT', BASE + 2 * PAGE, PAGE, 2 * PAGE,
                                sig_off + sig_size - 2 * PAGE, 1),
-                thread, string_command(0xe, '/usr/lib/dyld'),
+                entry, string_command(0xe, '/usr/lib/dyld'),
                 *[string_command(0xc, name, True) for name in LIBRARIES],
                 struct.pack('<6I', 0x32, 24, 2, 0x100000, 0x100000, 0),
                 struct.pack('<12I', 0x80000022, 48, 0, 0, 2 * PAGE, len(binds), 0, 0, 0, 0, 0, 0),

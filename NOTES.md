@@ -2,6 +2,33 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0009 REAL FILESYSTEM TEST READY: user explicitly authorizes continuing
+without repeated permission requests. Added tools/mkmunchroot.py: creates
+16 MiB HFS+ using local newfs_hfs and xpwn hfs editor, no mount/root needed.
+PID1 HFS variant reads /etc/munch-release and writes its marker to console.
+This validates filesystem lookup/read before dyld; Apple binaries are not
+available locally yet. Kernel remains verified run39582602130.
+Host source clones are ignored research/munch/{xpwn,hfsprogs}; pinned SHAs
+and local modern-glibc build adjustments recorded in docs/MUNCH_XNU_0009.md.
+Editor /tmp/munch-hfsplus; formatter under hfsprogs/newfs_hfs.tproj/newfs_hfs.
+Output shim/out/munch-xnu-0009/testios.img, 33206272 bytes, SHA256
+84acbd564885ad26230707561ba51655f69f160525d092e9acccc09ed0258582.
+Root HFS PA0x102078000 length0x1000000. Init/marker extraction byte equality,
+mode, volume header, payload/ADT bounds, boot roundtrip, loader host and
+repository/cross-build/RAM audit checks passed. No physical 0009 test yet.
+Next: user temporary boot and HFS marker/panic; then prepare dyld userland.
+Keep working 0008 intact. Never flash/format phone storage for this test.
+
+XNU0008 USERSPACE CONFIRMED ON HARDWARE: ../5388958027244838626.jpg
+shows md0 added (size 0x8000), BSD root md0, execution of /sbin/launchd,
+"MUNCH userspace: init running as PID 1" and repeated
+"MUNCH init: still alive". User independently reports repeating heartbeat.
+Root RAMDisk/mockfs, static Mach-O exec, PID1 getpid and console writes work.
+No panic visible. Heartbeats are intentional; exact timing not measured.
+This is our minimal probe, not Apple launchd or SpringBoard.
+Next phase: a real filesystem RAMDisk and richer userspace/dyld validation
+before attempting Apple launchd. Keep successful 0008 image unchanged.
+
 XNU0008 READY: same verified kernel as 0007, now with a static PID1 Mach-O
 RAMDisk. Existing mockfs serves the executable as /sbin/launchd, so HFS is
 unnecessary for this minimal test. tools/build-munch-init.sh uses GNU ARM64

@@ -28,7 +28,11 @@ Output: shim/out/munch-xnu-0008/testios.img, 16,445,440 bytes, SHA256
 Checks passed: RAMDisk segment/ADT correspondence and bounds, static
 Mach-O thread entry, all CodeDirectory page hashes, boot-v3 roundtrip,
 loader harness with five prefixes/eight rejected malformed inputs,
-RAM audit, cross-build and repository validation. No physical test yet.
+RAM audit, cross-build and repository validation.
+
+Hardware confirmed md0 root, execution of /sbin/launchd, PID 1 output and
+repeated MUNCH heartbeat messages. No panic is visible in the supplied
+photo. The heartbeat is intentional; its exact interval was not measured.
 
 ```bat
 copy /Y "\\wsl.localhost\archlinux\home\olzhas0986\ios-munch\upstream\shim\out\munch-xnu-0008\testios.img" C:\platform-tools\testios.img

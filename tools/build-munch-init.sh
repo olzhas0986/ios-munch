@@ -2,9 +2,14 @@
 # Build a static PID1 with the GNU cross assembler; no Apple SDK required.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-out=shim/out/munch-init-0008
+flags=()
+case "${1:-mockfs}" in
+    mockfs) out=shim/out/munch-init-0008 ;;
+    hfs) out=shim/out/munch-init-0009; flags=(-DMUNCH_HFS_PROBE=1) ;;
+    *) echo "Usage: bash tools/build-munch-init.sh [mockfs|hfs]" >&2; exit 2 ;;
+esac
 mkdir -p "$out"
-aarch64-linux-gnu-gcc -x assembler-with-cpp -c tools/munch-init.S -o "$out/init.o"
+aarch64-linux-gnu-gcc -x assembler-with-cpp "${flags[@]}" -c tools/munch-init.S -o "$out/init.o"
 if aarch64-linux-gnu-readelf -r "$out/init.o" | rg -q R_AARCH64; then
     echo 'PID1 must not contain relocations' >&2; exit 1
 fi

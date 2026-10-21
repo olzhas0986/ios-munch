@@ -13,8 +13,9 @@ def main():
     p.add_argument('reader', type=Path)
     p.add_argument('image', type=Path)
     p.add_argument('output', type=Path)
+    p.add_argument("--entry", action="append", help="additional executable path")
     a = p.parse_args()
-    queue = [('/bin/cat', False), ('/usr/lib/dyld', False)]
+    queue = [('/bin/cat', False), ('/usr/lib/dyld', False)] + [(name, False) for name in (a.entry or [])]
     seen, missing = {}, set()
     while queue:
         name, weak = queue.pop(0)

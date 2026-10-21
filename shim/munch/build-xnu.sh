@@ -8,7 +8,7 @@ kernel=$(realpath "$1")
 live_dtb=$(realpath "$2")
 init_ramdisk=$(realpath "$3")
 cd "$(dirname "$0")/.."
-out=out/munch-xnu-0011
+out=out/munch-xnu-0012
 mkdir -p "$out"
 python3 - "$kernel" <<'PY'
 from pathlib import Path
@@ -31,7 +31,7 @@ PY
 python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
 python3 ../tools/mkpayload.py "$kernel" "$out/munch.adt" "$out/payload.bin" \
     --ramdisk "$init_ramdisk" \
-    --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=md0 unentitled_ios_sim_launch=1' > "$out/payload-info.txt"
+    --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=md0 unentitled_ios_sim_launch=1 launchd_log_serial=1' > "$out/payload-info.txt"
 flags=(-O2 -ffreestanding -nostdlib -fno-pic -fno-pie -mgeneral-regs-only
     -mstrict-align -fno-stack-protector -Wall -Wextra -Werror -I. -Imunch -DMUNCH_XNU=1)
 objects=()

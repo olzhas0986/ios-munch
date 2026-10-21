@@ -40,3 +40,12 @@ fastboot boot testios.img
 
 Capture output after the boot tasks, especially the managed-service marker
 or complete panic. Temporary boot only. Preserve successful XNU0011.
+
+## Hardware result
+
+Photo 5386693037586587026.jpg confirms successful account lookup, xpcproxy
+execution, launchd-managed org.munch.probe, the service marker and exit(0).
+The one-shot service is then removed as configured. No panic is visible.
+Missing AppleInternal directories, system-event logging/persona warnings
+and empty shared-region probes remain; they did not prevent this test.
+This validates one service lifecycle, not the complete iOS service set.

@@ -2,6 +2,37 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0014 LAUNCHD RESTART/RAM WRITE PROBE READY: adds tools/munch-service.S,
+a signed static service under org.munch.stability. Writes generation byte
+to /tmp/munch-service-generation, prints PID/UID/generation. First run
+prints3 heartbeats then exits0 once; KeepAlive/ThrottleInterval5 should
+respawn generation2, which continues heartbeat indefinitely. Other state
+errors are diagnosed and block without busy-spinning. UserName=root;
+actual UID must be checked on device. /tmp and /private/var/tmp mode1777.
+Existing cat job, Apple launchd/xpcproxy and kernel remain unchanged.
+Image shim/out/munch-xnu-0014/testios.img,125480960bytes,SHA256
+a388e15a912ee5226065cc716a6030af0ffed50e814937adc66e29fb7c2262a9.
+Service byte extraction/signature hashes, KeepAlive policy, temp permissions,
+boot roundtrip, loader host, RAM audit, cross-build/repo checks pass.
+See docs/MUNCH_XNU_0014.md. No physical0014 yet. Next: temporary boot;
+photo generation1->one restart->generation2 and continued heartbeat.
+Preserve successful0013/0011. Root RAM only; no phone partitions accessed.
+
+XNU0013 MANAGED SERVICE SUCCESS ON HARDWARE: photo
+../5386693037586587026.jpg shows launchd exiting bootstrap/ondemand mode,
+xpcproxy PID3, successful cat spawn for org.munch.probe in user/501,
+"MUNCH LAUNCHD: managed service ran OK", exit(0), job removal because
+LaunchOnlyOnce is set. Apple launchd/PID1, account lookup, xpcproxy and
+managed-service lifecycle now work. No panic visible. root remount result
+not in photo, and observation duration not established.
+Remaining warnings include missing AppleInternal LaunchDaemons/Agents,
+system-event logging EPERM, absent persona type6 and empty shared-region
+probes. None prevented this one-shot service test; do not claim all
+services or permissions work. Preserve0013 as launchd checkpoint.
+Next phase: longer-lived service/restart and process/filesystem diagnostics,
+then select real system services; full iOS GUI needs substantial hardware
+and userland work. Do not enable unported sweet UFS/USB/input indiscriminately.
+
 XNU0012 HARDWARE: ../5386382558695726529.jpg confirms original Apple
 launchd asPID1, libignition, Darwin Bootstrapper, restore boot tasks.
 Fatal: unable to resolve 'mobile':114 specified username does not exist;

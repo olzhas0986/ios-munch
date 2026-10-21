@@ -20,7 +20,10 @@ def main():
     parser.add_argument("--launchd", action="store_true", help="stage Apple launchd behind a diagnostic PID1 wrapper")
     parser.add_argument("--system-version", type=Path)
     parser.add_argument("--accounts", type=Path, help="restore master.passwd and group directory")
+    parser.add_argument("--service", type=Path, help="launchd stability probe Mach-O")
     a = parser.parse_args()
+    if a.service:
+        assert a.launchd and a.accounts, "service requires launchd and accounts"
     if a.launchd:
         assert a.userland and a.system_version, "launchd requires userland and SystemVersion.plist"
     size_mib = 104 if a.launchd else 16
@@ -86,6 +89,8 @@ def main():
                         edit('chmod', '755', directory)
                         directories.add(directory)
                 edit('symlink', '/var', '/private/var')
+                edit('chmod', '1777', '/tmp')
+                edit('chmod', '1777', '/private/var/tmp')
 
                 def add_data(path, data, mode="444"):
                     local = work / 'config'
@@ -121,6 +126,14 @@ def main():
                        'RunAtLoad': True, 'LaunchOnlyOnce': True,
                        'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}
                 add_data('/System/Library/LaunchDaemons/org.munch.probe.plist', plistlib.dumps(job))
+                if a.service:
+                    data = a.service.read_bytes()
+                    assert struct.unpack_from('<II', data) == (0xfeedfacf, 0x100000c)
+                    add_data('/usr/libexec/munch-service', data, '555')
+                    job = {'Label': 'org.munch.stability', 'ProgramArguments': ['/usr/libexec/munch-service'],
+                           'UserName': 'root', 'RunAtLoad': True, 'KeepAlive': True, 'ThrottleInterval': 5,
+                           'StandardOutPath': '/dev/console', 'StandardErrorPath': '/dev/console'}
+                    add_data('/System/Library/LaunchDaemons/org.munch.stability.plist', plistlib.dumps(job))
         header = image.read_bytes()[1024:1536]
         assert header[:2] == b'H+' and struct.unpack_from('>I', header, 40)[0] == 4096
         listing = edit('ls', '/sbin').stdout.decode()

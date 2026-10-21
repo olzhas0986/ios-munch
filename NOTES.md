@@ -2,6 +2,17 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0016 GRAPHICS IMAGE READY: CI39615713929 succeeded from3784107.
+Kernel SHA256fff602fc743d5169bb63756fba98733647443d44bb45887b6e952a5af1b36f0c.
+Image shim/out/munch-xnu-0016/testios.img,125538304bytes,SHA256
+ ef3df9d904fa532fc835bd929b89c633afad21d7141de02011bc72a4d0db3584.
+IOKit/IOSurface dynamic probe imports/signature, exact root extraction,
+root launchd job, no syslog, boot-v3 roundtrip, memory audit, loader host
+5prefixes/8rejections and repo checks pass. Expected lower-screen changing
+bands and MUNCH GRAPHICS mapped message; failure reports stage1..6.
+No hardware result yet. Next: user temporary fastboot boot and photo.
+See docs/MUNCH_XNU_0016.md. Keep working0014 and raw evidence.
+
 GRAPHICS FOLLOW-UP: fixed remaining framebuffer log prefixes using exact
 literal replacements, preserving internal SWEET_FB macro names. Added
 reproducible graphics probe build script. Final kernel rebuild pending.

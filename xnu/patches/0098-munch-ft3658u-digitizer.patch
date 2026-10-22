@@ -383,9 +383,9 @@
 +    if (id == 5) { IOLog("MUNCH POWER: no idle ACTIVE slot\n"); return false; }
 +    unsigned bit = 1u << id, offset = id * 0x2a0;
 +    uint32_t irqEnable = powerRead(tcs, 0);
-+    if (irqEnable == 0xffffffff || !powerSet(tcs, 0, irqEnable & ~bit)) return false;
++    if (irqEnable == 0xffffffff || !powerSet(tcs, 0, irqEnable | bit)) return false;
 +    if (!emptySlot(tcs, id)) {
-+        (void)powerSet(tcs, 0, (powerRead(tcs, 0) & ~bit) | (irqEnable & bit)); return false;
++        (void)powerSet(tcs, 0, irqEnable); return false;
 +    }
 +    /* After the first payload write, failure quarantines this slot: no retry. */
 +    const unsigned reg[] = {0, 8, 4}, value[] = {millivolts, 7, 1};
@@ -425,7 +425,7 @@
 +    if (!powerSet(tcs, offset + 0x14, 0x10000) || !powerSet(tcs, offset + 0x14, 0) ||
 +        !powerSet(tcs, offset + 0x1c, 0) || !powerSet(tcs, offset + 0x10, 0)) return false;
 +    powerWrite(tcs, 8, bit);
-+    if ((powerRead(tcs, 4) & bit) || !powerSet(tcs, 0, (powerRead(tcs, 0) & ~bit) | (irqEnable & bit))) return false;
++    if ((powerRead(tcs, 4) & bit) || !powerSet(tcs, 0, irqEnable)) return false;
 +    IOLog("MUNCH POWER: %#x %umV active vote complete\n", address, millivolts);
 +    return true;
 +}

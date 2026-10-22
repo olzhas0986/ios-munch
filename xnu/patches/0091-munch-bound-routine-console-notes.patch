@@ -1,0 +1,85 @@
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7411,6 +7411,10 @@
+ 				error = EACCES;
+ 				goto done;
+ 			}
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++			static volatile SInt32 munch_spawn_notes;
++			if (OSIncrementAtomic(&munch_spawn_notes) < 4)
++#endif
+ 			printf("Allowing spawn of iOS binary %s since it has "
+ 			    "com.apple.private.security.no-sandbox entitlement or unentitled_ios_sim_launch "
+ 			    "boot-arg set to true\n", p->p_name);
+@@ -7421,6 +7425,10 @@
+ 			error = EACCES;
+ 			goto done;
+ 		} else {
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++			static volatile SInt32 munch_platform_notes;
++			if (OSIncrementAtomic(&munch_platform_notes) < 4)
++#endif
+ 			printf("Allowing spawn of iOS binary %s since correct platform was passed in spawn\n",
+ 			    p->p_name);
+ 		}
+--- a/bsd/vm/vm_unix.c
++++ b/bsd/vm/vm_unix.c
+@@ -58,6 +58,7 @@
+ #include <sys/file_internal.h>
+ #include <sys/param.h>
+ #include <sys/systm.h>
++#include <libkern/OSAtomic.h>
+ #include <sys/dir.h>
+ #include <sys/namei.h>
+ #include <sys/proc_internal.h>
+@@ -498,7 +499,14 @@
+ 	    vm_map_offset_t, s,
+ 	    vm_map_offset_t, e,
+ 	    vm_map_offset_t, lowest_unnestable_addr);
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	static volatile SInt32 munch_unnest_notes;
++	if (OSIncrementAtomic(&munch_unnest_notes) < 4) {
++#endif
+ 	printf("%s[%d] triggered unnest of range 0x%qx->0x%qx of DYLD shared region in VM map %p. While not abnormal for debuggers, this increases system memory footprint until the target exits.\n", current_proc()->p_comm, proc_getpid(current_proc()), (uint64_t)s, (uint64_t)e, (void *) VM_KERNEL_ADDRPERM(m));
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	}
++#endif
+ }
+ 
+ uint64_t
+--- a/iokit/Kernel/arm/SweetKeyStore.cpp
++++ b/iokit/Kernel/arm/SweetKeyStore.cpp
+@@ -10,13 +10,14 @@
+  * answer is kIOReturnNotFound; answering with a handle is the path a
+  * userspace reboot takes, so no bag file is needed.
+  *
+- * Every call is logged (selector, caller, argument shapes, result) so the
++ * The first successful calls and every error are logged so the
+  * next selectors the system needs show up on the console; unknown ones fail
+  * with kIOReturnUnsupported.
+  */
+ #include <pexpert/arm64/board_config.h>
+ 
+ #if defined(SWEET)
++#include <libkern/OSAtomic.h>
+ #include <IOKit/IOService.h>
+ #include <IOKit/IOUserClient.h>
+ #include <IOKit/IOKitKeys.h>
+@@ -218,10 +219,13 @@
+ 		break;
+ 	}
+ 
+-	char name[32];
+-	proc_selfname(name, sizeof(name));
+-	IOLog("MUNCH AKS: %s sel %u arg0 %llu in %u/%u out %u/%u -> 0x%x\n", name, selector,
+-	    arg0, in_scalars, in_struct, out_scalars, out_struct, ret);
++	static volatile SInt32 munch_aks_success_notes;
++	if (ret != kIOReturnSuccess || OSIncrementAtomic(&munch_aks_success_notes) < 8) {
++		char name[32];
++		proc_selfname(name, sizeof(name));
++		IOLog("MUNCH AKS: %s sel %u arg0 %llu in %u/%u out %u/%u -> 0x%x\n", name, selector,
++		    arg0, in_scalars, in_struct, out_scalars, out_struct, ret);
++	}
+ 	return ret;
+ }
+ #endif /* SWEET */

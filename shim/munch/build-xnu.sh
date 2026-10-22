@@ -1,14 +1,20 @@
 #!/bin/bash
 # Package an audited early CI kernel for temporary boot; never access a phone.
 set -euo pipefail
-if [ "$#" -ne 3 ]; then
-    echo 'Usage: bash shim/munch/build-xnu.sh KERNEL LIVE.dtb INIT_RAMDISK' >&2; exit 2
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+    echo 'Usage: bash shim/munch/build-xnu.sh KERNEL LIVE.dtb INIT_RAMDISK [--graphics]' >&2; exit 2
+fi
+graphics=0
+if [ "$#" -eq 4 ]; then
+    [ "$4" = --graphics ] || { echo 'Unknown option; expected --graphics' >&2; exit 2; }
+    graphics=1
 fi
 kernel=$(realpath "$1")
 live_dtb=$(realpath "$2")
 init_ramdisk=$(realpath "$3")
 cd "$(dirname "$0")/.."
-out=out/munch-xnu-0024
+out=out/munch-xnu-0025
+if [ "$graphics" -eq 1 ]; then out="${out}-graphics"; fi
 mkdir -p "$out"
 python3 - "$kernel" <<'PY'
 from pathlib import Path
@@ -20,18 +26,20 @@ assert hashlib.sha256(b).hexdigest() == expected, 'kernel checksum mismatch'
 magic, cpu, subtype = struct.unpack_from('<III', b)
 assert magic == 0xfeedfacf and cpu == 0x0100000c and subtype & 0xffffff in (0, 1)
 manifest = json.loads((p.parent / 'munch-patches.json').read_text())
-assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 93
+assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 94
 repo = Path.cwd().parent
 for item in manifest['files']:
-    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93)
+    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94)
     assert hashlib.sha256((repo / 'xnu/patches' / item['name']).read_bytes()).hexdigest() == item['sha256']
-assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93]
+assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94]
 print('Verified bounded iosroot full-root ARM64 CI kernel:', expected)
 PY
 python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
+cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1'
+if [ "$graphics" -eq 1 ]; then cmdline+=' sweetfb_noconsole=1'; fi
 python3 ../tools/mkpayload.py "$kernel" "$out/munch.adt" "$out/payload.bin" \
     --ramdisk "$init_ramdisk" \
-    --cmdline 'debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1' > "$out/payload-info.txt"
+    --cmdline "$cmdline" > "$out/payload-info.txt"
 flags=(-O2 -ffreestanding -nostdlib -fno-pic -fno-pie -mgeneral-regs-only
     -mstrict-align -fno-stack-protector -Wall -Wextra -Werror -I. -Imunch -DMUNCH_XNU=1)
 objects=()

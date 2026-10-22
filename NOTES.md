@@ -2,6 +2,87 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 GRAPHICS0024 PANIC IDENTIFIED / FIX PREPARED:
+User photos WIN_20261022_11_27_41/49 show first framebuffer present then
+Unexpected fault in kernel static region. Correct addresses from rotated
+inspection: PCfffffe00074560bc, LRfffffe0007a6510c,
+FARfffffe00071775e0, ESR9600004f. Exact0024 kernel nlist/disassembly:
+PC=switch_to_serial_console+0x1c, instruction STR WZR,[X8]; X8/FAR is
+cons_ops_index in protected __DATA_CONST. LR=PE_initialize_console+0x58.
+The graphics boot flag exposed an unsafe existing framebuffer console
+switch; this was an avoidable issue in the proposed graphics-view test.
+Initial sideways-photo address interpretation was wrong; these are the
+confirmed symbolized fault values. No UFS/GPT/rootfs failure is shown.
+Upstream0067 already documents the same fault. Independent0094 adapts only
+its console-muting fix, without persistent-log/storage/other Sweet drivers:
+mutable MUNCH console flag skips _cnputs only while !panic_active(); first
+frame sets flag instead of calling PE_initialize_console or changing the
+protected console selector. cons_ops_index protection remains intact.
+Normal0024 diagnostic image remains fallback. Old0024-graphics is superseded;
+do not boot it again. Stage last94; new outputs0025 and0025-graphics via
+optional --graphics. Patch application against unchanged baseline and shell/
+Python syntax PASS. Need publish CI, host mute/panic gate contract check,
+compiled no-console-switch framebuffer verification and packaged/loader tests.
+Installed root0020/Android/GPT untouched by this session. No new hardware
+result yet. Fix graphic panic before adding unrelated service behavior.
+
+2026-10-22 XNU0024 GRAPHICS VIEW READY:
+User supplied Camera Roll WIN_20261022_11_00_09/18,11_01_23/37: Apple logo
+clearly visible under console, repeated installcoordinat/analyticsd/
+mobileactivation corpse-limit messages; no new MUNCH CRASH or kernel panic
+shown. fileproviderd Sandbox op7 is a one-time syscall note, not an error.
+SpringBoard IOSurface selector40 appears. Do not claim working GUI or that
+these secondary daemon crashes explain the boot-logo wait.
+Found existing SweetFramebuffer.cpp sweetfb_noconsole boot argument: after
+first framebuffer swap it calls PE_initialize_console(kPEDisableScreen).
+Prepared quick reversible view test WITHOUT another kernel build:
+shim/out/munch-xnu-0024-graphics/testios.img,125628416bytes, SHA256
+d96e585160a60ef4cfc901798f9ea8644d95ab75b7b3f69ec8af03b25f18a4a3.
+Uses SAME verified0024 kernel54b40786..., existing installed root0020 and
+RAMdisk0017. Builder now accepts optional --graphics and isolates output
+in <normal-output>-graphics. Only cmdline adds sweetfb_noconsole=1; all
+kernel/RAMdisk segments byte-identical to0024, ADT equal except fresh64B
+random seed. v3 header/exact embedded payload and full loader harness PASS.
+Original0024 diagnostic image/hash remains intact. No kernel patch, root
+reinstall, GPT/Android write or CI run was needed for this view test.
+Next user: temporarily boot graphics variant and photograph clean screen
+after2-3minutes. If it remains Apple logo, next diagnosis should add bounded
+exit-reason reports for observed secondary daemon names plus bounded UI
+thread snapshots; these diagnostics are NOT implemented in this turn.
+Do not keep blindly adding unrelated fixes or call op7 a Sandbox failure.
+See docs/MUNCH_XNU_0024.md graphics-view instructions. Source/docs change
+is local, ready to commit; original kernel CI source is already published.
+
+XNU0024 READY FOR PHONE (2026-10-22): CI39729478867 SUCCESS.
+Published sourcee3c273a47cccd96a653fdfee6ae590b3ab5c460d; artifact12404233767.
+Kernel research/munch/xnu-run-39729478867/kernel.development.sweet SHA256
+54b40786b733b3c4e3f5b1d442b7f53e22a622b53f5bdb42efe31a188484d670.
+Boot shim/out/munch-xnu-0024/testios.img,125628416bytes, SHA256
+d2e424598ec362fac1c48d11d5c89b2bc77edec90cecd3b9973f6277fbe8e93c.
+CI ARM64/SHA/manifest93 PASS. Compiled new AKS error counters/suppression
+message and retained MUNCH CRASH/Sandbox diagnostics verified. Host actual
+AKS dispatch/DER/bounds/notification/error budget checks PASS. Live RAM/UFS
+audit, v3 header/exact embedded payload/root arguments and loader regression
+(5prefixes,9malformed,segments/BSS/ADT/boot-args) PASS.
+Next user: temporary fastboot boot0024/testios.img, existing installed root0020.
+Wait several minutes, photograph last output or graphics transition. Need
+hardware verification of AKS35 response, absence of optional open-time
+relocation errors and actual GUI progress. No0024 phone result yet; previous
+stall cause remains unproven. Do NOT claim full iOS/UI success or reformat.
+No root reinstall/GPT/Android changes. docs/MUNCH_XNU_0024.md has commands.
+Final docs commit remains local; CI source already published.
+
+XNU0024 CI RUNNING:39729478867, published source
+e3c273a47cccd96a653fdfee6ae590b3ab5c460d, local branch synchronized.
+Host actual AKS dispatch/DER helpers PASS:17/35 same valid8-field SET,
+inband/descriptor equality, short-buffer NoSpace/no overwrite,103 slot guard,
+101 consume, unknown selector rejection and per-selector3-errors/suppression.
+Pinned errno.h confirms34=ERANGE,28=ENOSPC; do not interpret dash34 as
+negative disk-full status. docs/MUNCH_XNU_0024.md prepared. Wait CI, download
+artifact, verify manifest93/ARM64/SHA and stderr/Sandbox diagnostics retained,
+package0024 using existingRAMdisk0017/live.dtb, run loader/header checks.
+No0024 phone result yet. Do not reinstall/format installed root0020.
+
 2026-10-22 XNU0023 PHOTO RESULT / AKS35 AND HFS RELOCATION:
 Nine Camera Roll WIN_20261022_10_01_18..10_33_25 photos reviewed. User says
 Apple logo appeared before these frames, then display stayed on last output.

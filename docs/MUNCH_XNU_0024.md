@@ -49,24 +49,9 @@ Kernel checksum/manifest/ARM64, compiled diagnostic markers, boot header,
 embedded payload, memory audit and loader host checks passed. Actual0024
 hardware behavior is not yet verified.
 
-## Graphics view without console overlay
+## Superseded graphics view
 
-New photos show an Apple logo underneath continuing console messages.
-The existing framebuffer driver accepts sweetfb_noconsole=1 and disables
-screen-console output after its first swap. The builder's optional
---graphics argument uses that existing mechanism and writes a separate
-shim/out/munch-xnu-0024-graphics/testios.img. The kernel is unchanged;
-secondary service failures are not repaired by hiding the overlay.
-
-```bat
-copy /Y "\\wsl.localhost\archlinux\home\olzhas0986\ios-munch\upstream\shim\out\munch-xnu-0024-graphics\testios.img" C:\platform-tools\testios.img
-cd /d C:\platform-tools
-fastboot boot testios.img
-```
-
-Wait two to three minutes and capture the resulting graphics. The original
-0024 image remains available when screen crash diagnostics are needed.
-Graphics image SHA256:d96e585160a60ef4cfc901798f9ea8644d95ab75b7b3f69ec8af03b25f18a4a3.
-All kernel/RAMdisk segments match the diagnostic payload exactly, the ADT
-matches except for its fresh boot seed, the boot payload/header checks and
-loader host regression pass. This view profile has not yet been phone-tested.
+The0024 graphics profile was phone-tested and panicked while writing
+protected cons_ops_index. Do not boot it again. Use the corrected profile
+in [MUNCH_XNU_0025.md](MUNCH_XNU_0025.md). The normal0024 diagnostic image
+remains available; its boot command above does not enable that unsafe path.

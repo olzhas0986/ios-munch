@@ -2,6 +2,39 @@
 
 ## Local munch handoff — 2026-10-21
 
+XNU0025 GRAPHICS FIX READY FOR PHONE (2026-10-22):
+CI39735617667 SUCCESS, source0df35d8a8ab10c946490af5d6769ed2926505cfe,
+artifact12407556825. Kernel research/munch/xnu-run-39735617667/kernel.development.sweet
+SHA25616b8f19fd717b85c933d1c20b8d8cfabb24b708d354b915b41c36a05382d8bb0.
+Deliver shim/out/munch-xnu-0025-graphics/testios.img,125628416bytes, SHA256
+66f43665509fda83dd226e793a85d435664a584508dcca9fd78625486734fb6c.
+Normal0025 diagnostic fallback SHA256
+4a67e436f8ff23a9e26f57682beb6b3f0d42ba26db1f55aa3a06d68e277f251a.
+Compiled layout verified: munch_console_muted atfffffe0007bcd4c8 in writable
+__DATA,__common (initprot3); cons_ops_index remainsfffffe00071775e0 in
+__DATA_CONST,__const (initprot1). Actual framebuffer swap752bytes at
+fffffe0007a5fe38 has NO direct call to PE_initialize_console or console
+switch helpers. Report xnu-run-39735617667/console-layout-check.json.
+Host actual output gate normal/mute/panic-bypass/disable control PASS.
+CI checksum/ARM64/manifest94, liveFDT audit, both boot headers/exactpayloads/
+root args and loader host5prefixes/9malformed/segments/BSS/ADT checks PASS.
+Profiles match every kernel/RAMdisk segment; differ only quiet argument and
+fresh ADT random seed. No0025 hardware result yet. Next user temporary boot
+0025-graphics, photograph output after2-3minutes. No root reinstall; reuse
+installed0020. Do NOT use superseded0024-graphics. Kernel protection was
+not weakened and no unrelated daemon or UFS logic was changed. See docs/
+MUNCH_XNU_0025.md;0024 graphics instructions removed/marked superseded.
+
+XNU0025 CI RUNNING:39735617667, published source
+0df35d8a8ab10c946490af5d6769ed2926505cfe, local branch synchronized.
+Host actual _cnputs gate PASS: normal output, mute, panic bypass, original
+disableConsoleOutput behavior. Patched framebuffer has no PE_initialize_console
+call. New docs/MUNCH_XNU_0025.md prepared;0024 graphics docs marked superseded.
+Need CI artifact, verify new mute variable lies in writable section while
+cons_ops_index stays protected, check compiled framebuffer no unsafe call,
+package0025 normal and--graphics, run loader/header/embedded-payload tests.
+No0025 phone result yet. Existing root0020 remains installed; no reinstall.
+
 2026-10-22 GRAPHICS0024 PANIC IDENTIFIED / FIX PREPARED:
 User photos WIN_20261022_11_27_41/49 show first framebuffer present then
 Unexpected fault in kernel static region. Correct addresses from rotated

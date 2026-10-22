@@ -48,7 +48,7 @@
 +#endif
 --- /dev/null
 +++ b/iokit/Kernel/arm/hid/MunchDigitizer.cpp
-@@ -0,0 +1,322 @@
+@@ -0,0 +1,316 @@
 +/* Munch FT3658U: SPI FIFO transport and coherent HID digitizer frames. */
 +#include <IOKit/IOLib.h>
 +#include <IOKit/IOWorkLoop.h>
@@ -283,13 +283,7 @@
 +        if (!((active | frame.downMask) & bit)) continue;
 +        bool down = (frame.downMask & bit) != 0;
 +        FT3658Point point = down ? next[i] : previous[i];
-+        /* Same centered crop offsets as active Munch framebuffer. */
-+        int native = 0;
-+        PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
-+        const uint32_t logicalW = native ? 1080 : 1125, logicalH = native ? 2400 : 2436;
-+        const uint32_t offX = native ? 0 : 22, offY = native ? 0 : 18;
-+        IOFixed x = (IOFixed)(((uint64_t)(point.x + offX) << 16) / logicalW);
-+        IOFixed y = (IOFixed)(((uint64_t)(point.y + offY) << 16) / logicalH);
++        IOFixed x = (IOFixed)(((uint64_t)point.x << 16) / 1080), y = (IOFixed)(((uint64_t)point.y << 16) / 2400);
 +        IOHIDEvent *child = IOHIDEvent::digitizerEvent(now, i + 2, kIOHIDDigitizerTransducerTypeFinger, down, down ? 1 : 0, x, y);
 +        if (!child) { complete = false; break; }
 +        unsigned flags = edge[i] ? kIOHIDDigitizerEventFromEdgeTip : 0;
@@ -308,7 +302,7 @@
 +        group->setIntegerValue(kIOHIDEventFieldDigitizerTouch, frame.downMask != 0);
 +        group->setIntegerValue(kIOHIDEventFieldDigitizerButtonMask, frame.downMask != 0);
 +        group->setIntegerValue(kIOHIDEventFieldDigitizerEventMask, combined);
-+        if ((active ^ frame.downMask) && notes++ < 2) IOLog("MUNCH TOUCH: contacts %#x -> %#x\n", active, frame.downMask);
++        if ((active ^ frame.downMask) && notes++ < 24) IOLog("MUNCH TOUCH: contacts %#x -> %#x\n", active, frame.downMask);
 +        memcpy(previous, next, sizeof(previous)); active = frame.downMask;
 +        dispatchEvent(group);
 +    }
@@ -331,13 +325,13 @@
 +    bool transport = readSPI(self->bus, 1, 90, bytes);
 +    bool valid = transport && ft3658Unpack(bytes, 99, frame);
 +    if (valid) {
-+        if (self->errors >= 100) IOLog("MUNCH TOUCH: reports recovered after %u failures\n", self->errors);
++        if (self->errors) IOLog("MUNCH TOUCH: reports recovered after %u failures\n", self->errors);
 +        self->errors = 0;
 +        self->consume(frame);
 +    } else {
 +        ++self->errors;
 +        /* Print a short burst, then at most once per 100 failures. */
-+        if (self->errors == 1 || (self->errors % 1000) == 0) {
++        if (self->errors <= 5 || (self->errors % 100) == 0) {
 +            uint16_t received = (uint16_t)(bytes[97] | ((unsigned)bytes[98] << 8));
 +            uint16_t calculated = ft3658Checksum(bytes + 7, 90);
 +            IOLog("MUNCH TOUCH: report fail #%u transport=%u unusable=%u hdr=%02x:%02x:%02x:%02x payload=%02x:%02x:%02x:%02x crc=%04x/%04x irq=%#x status=%#x rx_fifo=%#x\n",

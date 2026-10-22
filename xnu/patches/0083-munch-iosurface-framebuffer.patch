@@ -943,7 +943,7 @@
 +#endif /* SWEET */
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -0,0 +1,474 @@
+@@ -0,0 +1,455 @@
 +/*
 + * Built-in IOMobileFramebuffer for SWEET: the ABL's continuous-splash
 + * framebuffer (1080x2400 a8r8g8b8 in RAM, the panel scans it out by
@@ -1007,7 +1007,7 @@
 +#define SWEET_FB_NOTIFY_TYPES           8
 +#define SWEET_FB_NOTIFY_VSYNC           5
 +#define SWEET_FB_VSYNC_US               16667
-+#define SWEET_FB_DOT_PITCH              458     /* logical iPhone X density */
++#define SWEET_FB_DOT_PITCH              395     /* ppi, 6.67" 1080x2400 */
 +#define SWEET_FB_FORMAT_BGRA            0x42475241
 +
 +class IOMobileFramebuffer : public IOService {
@@ -1030,8 +1030,6 @@
 +public:
 +	uint64_t      fPhys;
 +	uint32_t      fWidth, fHeight, fRowBytes;
-+	uint32_t      fLogicalW, fLogicalH;
-+	int32_t       fOffX, fOffY;
 +	uintptr_t     fPixels;          /* kernel mapping of the panel memory */
 +	IOMemoryMap  *fMap;
 +	SweetSurface *fSurface;         /* the panel memory as an IOSurface */
@@ -1084,13 +1082,6 @@
 +	fWidth = (uint32_t)video.v_width;
 +	fHeight = (uint32_t)video.v_height;
 +	fRowBytes = (uint32_t)video.v_rowBytes;
-+	/* Physical scanning stays 1080x2400; UI layout is iPhone X sized. */
-+	int native = 0;
-+	PE_parse_boot_argn("sweetfb_native", &native, sizeof(native));
-+	fLogicalW = native ? fWidth : 1125;
-+	fLogicalH = native ? fHeight : 2436;
-+	fOffX = ((int32_t)fLogicalW - (int32_t)fWidth) / 2;
-+	fOffY = ((int32_t)fLogicalH - (int32_t)fHeight) / 2;
 +	if (fPhys != 0x9c000000ULL || fWidth != 1080 || fHeight != 2400 || fRowBytes != 4320) {
 +		IOLog("MUNCH FB: no boot framebuffer\n");
 +		return false;
@@ -1117,8 +1108,8 @@
 +	setProperty("external", false);
 +	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
 +	registerService();
-+	IOLog("MUNCH FB: AppleCLCD %ux%u, logical %ux%u stride %u at 0x%llx, default surface %u\n",
-+	    fWidth, fHeight, fLogicalW, fLogicalH, fRowBytes, fPhys, fSurface->id);
++	IOLog("MUNCH FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
++	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id);
 +	return true;
 +}
 +
@@ -1201,7 +1192,7 @@
 +			continue;
 +		}
 +		SweetSurface *s = sweet_surface_copy(id);
-+		if (sweet_fb_swaps_logged < 2) {
++		if (sweet_fb_swaps_logged < 16) {
 +			sweet_fb_swaps_logged++;
 +			IOLog("MUNCH FB: swap %u layer %u surface %u %ux%u fmt 0x%x bpr %u a %d,%d %ux%u b %d,%d %dx%d\n",
 +			    get32(rec, 0x50), layer, id, s ? s->width : 0, s ? s->height : 0,
@@ -1221,18 +1212,8 @@
 +		if (sx < 0 || sy < 0) {
 +			sx = sy = 0;
 +		}
-+		/* UI space -> centered physical panel space (crop, never scale). */
-+		dx -= fOffX;
-+		dy -= fOffY;
-+		if (dx < 0) {
-+			sx -= dx;
-+			w += dx;
-+			dx = 0;
-+		}
-+		if (dy < 0) {
-+			sy -= dy;
-+			h += dy;
-+			dy = 0;
++		if (dx < 0 || dy < 0) {
++			dx = dy = 0;
 +		}
 +		if (w > (int32_t)s->width - sx) {
 +			w = (int32_t)s->width - sx;
@@ -1369,8 +1350,8 @@
 +		outCount = 1;
 +		break;
 +	case kSweetFBGetDisplaySize:
-+		out[0] = fFB->fLogicalW;
-+		out[1] = fFB->fLogicalH;
++		out[0] = fFB->fWidth;
++		out[1] = fFB->fHeight;
 +		outCount = 2;
 +		break;
 +	case kSweetFBIsMainDisplay:

@@ -2,14 +2,15 @@
 # Package an audited early CI kernel for temporary boot; never access a phone.
 set -euo pipefail
 if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
-    echo 'Usage: bash shim/munch/build-xnu.sh KERNEL LIVE.dtb INIT_RAMDISK [--graphics|--profiles]' >&2; exit 2
+    echo 'Usage: bash shim/munch/build-xnu.sh KERNEL LIVE.dtb INIT_RAMDISK [--graphics|--console|--profiles]' >&2; exit 2
 fi
-mode=normal
+mode=graphics
 if [ "$#" -eq 4 ]; then
     case "$4" in
         --graphics) mode=graphics ;;
+        --console) mode=normal ;;
         --profiles) mode=profiles ;;
-        *) echo 'Unknown option; expected --graphics or --profiles' >&2; exit 2 ;;
+        *) echo 'Unknown option; expected --graphics, --console or --profiles' >&2; exit 2 ;;
     esac
 fi
 kernel=$(realpath "$1")
@@ -39,7 +40,7 @@ assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswit
 print('Verified bounded iosroot full-root ARM64 CI kernel:', expected)
 PY
 python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
-cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1'
+cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1'
 if [ "$mode" = graphics ]; then cmdline+=' sweetfb_noconsole=1'; fi
 if [ "$mode" = profiles ]; then
     cmdline+=' munchsample=SpringBoard,profiled munchnull=profiled'

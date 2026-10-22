@@ -1,0 +1,63 @@
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -42,6 +42,7 @@
+ #include <console/video_console.h>
+ #include <console/serial_protos.h>
+ #include <kern/startup.h>
++#include <kern/debug.h>
+ #include <kern/thread.h>
+ #include <kern/cpu_data.h>
+ #include <kern/sched_prim.h>
+@@ -266,10 +267,21 @@
+  *             waiting for an interrupt when the hardware device isn't ready
+  * @param size The number of characters to print to the console.
+  */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/* Avoid writing read-only-late cons_ops_index after the first GUI frame. */
++volatile int munch_console_muted;
++#endif
++
+ static inline void
+ _cnputs(char *c, int size, bool poll)
+ {
+ 	extern int disableConsoleOutput;
++
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	if (munch_console_muted && !panic_active()) {
++		return;
++	}
++#endif
+ 
+ 	if (disableConsoleOutput) {
+ 		return;
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -26,12 +26,13 @@
+  *
+  * The panel memory itself is published as an IOSurface and returned as the
+  * default framebuffer surface. The kernel text console keeps drawing over
+- * the GUI by default: pausing it (boot-arg sweetfb_noconsole=1, on the
+- * first swap) switches the console to serial, which also hides panics.
++ * the GUI by default: boot-arg sweetfb_noconsole=1 mutes normal console
++ * output after the first swap; panic output remains enabled.
+  */
+ #include "SweetSurface.h"
+ 
+ #if defined(SWEET)
++extern "C" volatile int munch_console_muted; /* serial_console.c */
+ #include <IOKit/IOService.h>
+ #include <IOKit/IOUserClient.h>
+ #include <IOKit/IOKitKeys.h>
+@@ -228,9 +229,9 @@
+ 		int quiet = 0;
+ 		fConsolePaused = true;
+ 		if (PE_parse_boot_argn("sweetfb_noconsole", &quiet, sizeof(quiet)) && quiet != 0) {
+-			PE_Video video;
+-			PE_current_console(&video);
+-			PE_initialize_console(&video, kPEDisableScreen);
++			/* The generic console switch writes protected cons_ops_index. */
++			IOLog("MUNCH FB: mute screen console; panic output remains enabled\n");
++			munch_console_muted = 1;
+ 		}
+ 	}
+ 

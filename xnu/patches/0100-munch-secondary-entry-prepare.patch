@@ -1,0 +1,45 @@
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -143,8 +143,8 @@
+ 	adrp	x19, EXT(ResetHandlerData)@page			// Get address of the reset handler data
+ 	add		x19, x19, EXT(ResetHandlerData)@pageoff
+ 	mrs		x15, MPIDR_EL1						// Load MPIDR to get CPU number
+-#if HAS_CLUSTER
+-	and		x0, x15, #0xFFFF					// CPU number in Affinity0, cluster ID in Affinity1
++#if HAS_CLUSTER || defined(SWEET)
++	and		x0, x15, #0xFFFF					// Munch MPIDR uses Aff1 for CPU index (0x000..0x700)
+ #else
+ 	and		x0, x15, #0xFF						// CPU number is in MPIDR Affinity Level 0
+ #endif
+@@ -279,6 +279,31 @@
+ LEXT(bootstrap_instructions)
+ 
+ #endif /* defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) */
++#if defined(SWEET)
++/*
++ * Munch PSCI secondary entry, EL1-only first-stage bring-up.
++ * PSCI enters with MMU disabled and context_id in x0.
++ * No stacks or global state are touched here. LowResetVectorBase performs
++ * the ordinary per-CPU bootstrap using MPIDR affinity matching.
++ *
++ * IMPORTANT: this symbol is NOT wired to CPU_ON yet. Do not use it as an
++ * entry point without verifying its physical address, EL, coherency, and
++ * required reset mappings; EL2 deliberately parks rather than guessing.
++ */
++	.align 2
++	.globl EXT(munch_secondary_entry)
++LEXT(munch_secondary_entry)
++	msr		DAIFSet, #0xf
++	mrs		x1, CurrentEL
++	cmp		x1, #0x4				// EL1
++	b.ne		Lmunch_secondary_unsupported_el
++	msr		SPSel, #1
++	b		EXT(LowResetVectorBase)
++Lmunch_secondary_unsupported_el:
++	wfe
++	b		Lmunch_secondary_unsupported_el
++#endif /* SWEET */
++
+ 	.align 2
+ 	.globl EXT(resume_idle_cpu)
+ LEXT(resume_idle_cpu)

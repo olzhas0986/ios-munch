@@ -1,0 +1,51 @@
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -15,6 +15,7 @@
+ #include <kern/clock.h>
+ #include <kern/processor.h>
+ #include <mach/mach_time.h>
++#include <pexpert/pexpert.h>
+ 
+ class SweetCPU : public IOCPU {
+ 	OSDeclareDefaultStructors(SweetCPU);
+@@ -31,7 +32,8 @@
+ 	const OSSymbol *getCPUName(void) APPLE_KEXT_OVERRIDE;
+ };
+ 
+-/* SM8250 early SMP groundwork. This does NOT enable secondary startup. */
++/* SM8250 PSCI transport. CPU1 stays disabled until CPU registration is ready. */
++extern "C" void munch_secondary_entry(void);
+ /* PSCI CPU_ON (SMCCC 64-bit); secondary entry is not yet wired. */
+ static int32_t __attribute__((unused))
+ munch_psci_cpu_on(uint64_t mpidr, uint64_t entry_pa, uint64_t context)
+@@ -169,7 +171,29 @@
+ kern_return_t
+ SweetCPU::startCPU(vm_offset_t start_paddr __unused, vm_offset_t arg_paddr __unused)
+ {
+-	return KERN_NOT_SUPPORTED;
++    /* Still unreachable in the production CPU0-only topology: start() rejects
++     * num_cpus != 1. This is a deliberately opt-in CPU1 transport stage. */
++    const ml_topology_info_t *topology = ml_get_topology_info();
++    const unsigned cpu = getCPUNumber();
++    if (cpu != 1 || topology->num_cpus < 2 || topology->num_cpus > 8 ||
++        topology->cpus[cpu].phys_id != 0x100 || topology->boot_cpu->cpu_id != 0) {
++        return KERN_NOT_SUPPORTED;
++    }
++    int enabled = 0;
++    PE_parse_boot_argn("munch_cpu1_on", &enabled, sizeof(enabled));
++    if (enabled != 1) {
++        return KERN_NOT_SUPPORTED;
++    }
++    const vm_offset_t entry_pa = ml_static_vtop((vm_offset_t)&munch_secondary_entry);
++    if (entry_pa == 0 || (entry_pa & 3) != 0) {
++        IOLog("MUNCH SMP: CPU1 entry physical address invalid\n");
++        return KERN_FAILURE;
++    }
++    IOLog("MUNCH SMP: experimental CPU1 CPU_ON mpidr=0x100 entry_pa=0x%llx\n",
++        (unsigned long long)entry_pa);
++    const int32_t rc = munch_psci_cpu_on(0x100, entry_pa, 1);
++    IOLog("MUNCH SMP: CPU1 PSCI returned %d\n", rc);
++    return rc == 0 ? KERN_SUCCESS : KERN_FAILURE;
+ }
+ 
+ void

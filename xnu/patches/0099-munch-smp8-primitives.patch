@@ -1,0 +1,46 @@
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -30,6 +30,21 @@
+ 	void signalCPU(IOCPU *target) APPLE_KEXT_OVERRIDE;
+ 	const OSSymbol *getCPUName(void) APPLE_KEXT_OVERRIDE;
+ };
++
++/* SM8250 early SMP groundwork. This does NOT enable secondary startup. */
++/* PSCI CPU_ON (SMCCC 64-bit); secondary entry is not yet wired. */
++static int32_t __attribute__((unused))
++munch_psci_cpu_on(uint64_t mpidr, uint64_t entry_pa, uint64_t context)
++{
++    register uint64_t x0 __asm__("x0") = 0xc4000003ULL;
++    register uint64_t x1 __asm__("x1") = mpidr;
++    register uint64_t x2 __asm__("x2") = entry_pa;
++    register uint64_t x3 __asm__("x3") = context;
++    __asm__ volatile("smc #0" : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3) : :
++        "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
++        "x14", "x15", "x16", "x17", "cc", "memory");
++    return (int32_t)x0;
++}
+ 
+ OSDefineMetaClassAndStructors(SweetCPU, IOCPU);
+ 
+@@ -127,11 +142,17 @@
+ void
+ SweetCPU::signalCPU(IOCPU *target)
+ {
+-	/* Only the boot CPU is registered by this driver. */
+-	if (target != this || cpu_number() != (int)getCPUNumber()) {
+-		panic("MUNCH CPU: secondary CPU signalling is not implemented");
++	/* Target SGI1 using the advertised topology MPIDR, not sender MPIDR. */
++	const ml_topology_info_t *topology = ml_get_topology_info();
++	if (target == NULL || target->getCPUNumber() >= topology->num_cpus) {
++		panic("MUNCH CPU: invalid SGI target");
+ 	}
+-	uint64_t mpidr = __builtin_arm_rsr64("MPIDR_EL1");
++	/* Keep the CPU0-only production guard until secondary startup is wired. */
++	if (topology->num_cpus != 1 || target != this ||
++	    cpu_number() != (int)getCPUNumber()) {
++		panic("MUNCH CPU: SMP startup not yet enabled");
++	}
++	uint64_t mpidr = topology->cpus[target->getCPUNumber()].phys_id;
+ 	unsigned int aff0 = mpidr & 0xff;
+ 	if (aff0 >= 16) {
+ 		panic("MUNCH CPU: SGI target requires unsupported range selector");

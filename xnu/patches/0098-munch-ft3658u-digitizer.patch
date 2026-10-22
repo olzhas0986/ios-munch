@@ -341,7 +341,7 @@
 +}
 --- /dev/null
 +++ b/iokit/Kernel/arm/hid/MunchTouchPower.cpp
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,113 @@
 +/* Munch-only active RPMh votes for FT3658U supplies, using firmware CMD DB. */
 +#include <IOKit/IOLib.h>
 +#include <mach/mach_types.h>
@@ -408,7 +408,20 @@
 +        if (complete) break;
 +        IODelay(1);
 +    }
-+    if (!complete) { IOLog("MUNCH POWER: TCS%u timeout, quarantined\n", id); return false; }
++    if (!complete) {
++        /* Snapshot only. Do not clear IRQ, rearm TCS or retry a regulator vote. */
++        IOLog("MUNCH POWER: TCS%u timeout, quarantined: irq_en=%#x irq_status=%#x control=%#x status=%#x cmd_en=%#x wait=%#x\n",
++              id, powerRead(tcs, 0), powerRead(tcs, 4),
++              powerRead(tcs, offset + 0x14), powerRead(tcs, offset + 0x18),
++              powerRead(tcs, offset + 0x10), powerRead(tcs, offset + 0x1c));
++        for (unsigned c = 0; c < 3; ++c) {
++            unsigned co = offset + c * 0x14;
++            IOLog("MUNCH POWER: TCS%u cmd%u msg=%#x addr=%#x data=%#x status=%#x\n",
++                  id, c, powerRead(tcs, co + 0x30), powerRead(tcs, co + 0x34),
++                  powerRead(tcs, co + 0x38), powerRead(tcs, co + 0x3c));
++        }
++        return false;
++    }
 +    if (!powerSet(tcs, offset + 0x14, 0x10000) || !powerSet(tcs, offset + 0x14, 0) ||
 +        !powerSet(tcs, offset + 0x1c, 0) || !powerSet(tcs, offset + 0x10, 0)) return false;
 +    powerWrite(tcs, 8, bit);

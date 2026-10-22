@@ -48,7 +48,7 @@
 +#endif
 --- /dev/null
 +++ b/iokit/Kernel/arm/hid/MunchDigitizer.cpp
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,316 @@
 +/* Munch FT3658U: SPI FIFO transport and coherent HID digitizer frames. */
 +#include <IOKit/IOLib.h>
 +#include <IOKit/IOWorkLoop.h>
@@ -316,16 +316,42 @@
 +        self->initialized = true;
 +        if (!startSPI(self->bus)) return;
 +    }
-+    uint8_t bytes[128] = {};
-+    FT3658Frame frame = {};
-+    if (readSPI(self->bus, 1, 90, bytes) && ft3658Unpack(bytes, 99, frame)) {
-+        self->errors = 0; self->consume(frame);
-+    } else if (self->bus.unusable || ++self->errors >= 5) {
-+        FT3658Frame release = {}; self->consume(release);
-+        IOLog("MUNCH TOUCH: invalid reports or FIFO failure; input stopped\n");
++    if (self->bus.unusable) {
++        IOLog("MUNCH TOUCH: SPI engine marked unusable; polling stopped (no unsafe resets)\n");
 +        return;
 +    }
-+    source->setTimeoutMS(10);
++    uint8_t bytes[128] = {};
++    FT3658Frame frame = {};
++    bool transport = readSPI(self->bus, 1, 90, bytes);
++    bool valid = transport && ft3658Unpack(bytes, 99, frame);
++    if (valid) {
++        if (self->errors) IOLog("MUNCH TOUCH: reports recovered after %u failures\n", self->errors);
++        self->errors = 0;
++        self->consume(frame);
++    } else {
++        ++self->errors;
++        /* Print a short burst, then at most once per 100 failures. */
++        if (self->errors <= 5 || (self->errors % 100) == 0) {
++            uint16_t received = (uint16_t)(bytes[97] | ((unsigned)bytes[98] << 8));
++            uint16_t calculated = ft3658Checksum(bytes + 7, 90);
++            IOLog("MUNCH TOUCH: report fail #%u transport=%u unusable=%u hdr=%02x:%02x:%02x:%02x payload=%02x:%02x:%02x:%02x crc=%04x/%04x irq=%#x status=%#x rx_fifo=%#x\n",
++                self->errors, (unsigned)transport, (unsigned)self->bus.unusable,
++                bytes[0], bytes[1], bytes[2], bytes[3],
++                bytes[7], bytes[8], bytes[9], bytes[10],
++                received, calculated, loadReg(self->bus.engine, 0x610),
++                loadReg(self->bus.engine, 0x40), loadReg(self->bus.engine, 0x804));
++        }
++        if (self->errors == 5) {
++            FT3658Frame release = {};
++            self->consume(release);
++            IOLog("MUNCH TOUCH: five bad reports; continuing cautious polling\n");
++        }
++        if (self->bus.unusable) {
++            IOLog("MUNCH TOUCH: SPI abort failed, engine unusable; polling stopped\n");
++            return;
++        }
++    }
++    source->setTimeoutMS(self->errors ? 100 : 10);
 +}
 +void MunchDigitizer::stop(IOService *provider)
 +{

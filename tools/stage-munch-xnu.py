@@ -8,8 +8,8 @@ import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
-LAST = 86
-PATCH_NUMBERS = tuple(range(1, 28)) + (32, 82, 83, 84, 85, 86)  # Independent Munch graphics, bounded iosroot and root services.
+LAST = 87
+PATCH_NUMBERS = tuple(range(1, 28)) + (32, 82, 83, 84, 85, 86, 87)  # Independent Munch graphics, bounded iosroot and root services.
 
 
 def main():

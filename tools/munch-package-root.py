@@ -57,6 +57,8 @@ def main():
     a = p.parse_args()
     log = a.vm_log.read_text(errors='replace')
     assert 'MUNCH_ROOT_VM_PASS' in log and 'MUNCH_ROOT_VM_FAILED' not in log, 'image build is not verified complete'
+    assert 'MUNCH_ROOT_HARDLINKS_PASS_' in log, 'hard-link verification is required'
+    assert 'MUNCH_ROOT_CACHE_PASS' in log, 'shared-cache installation was not checked'
     archive = json.loads(a.archive_manifest.read_text())
     for path, value in archive['critical_sha256'].items():
         assert value + '  /target' + path in log, ('guest file hash mismatch', path)

@@ -2,6 +2,68 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 PHONE0020 / HFS LINK LOG FLOOD:
+User reports repeated hfs: set hardlink bit on vol=MunchIOS with varying
+cnid/inoid, hiding subsequent errors. Full root/package0020 has now been
+booted, but no readable downstream failure is available. This is Apple's
+HFS lookup repairing Linux-created hard-link flags, not by itself a panic.
+Independent0087 imports upstream0041's three printf guards, with a shared
+atomic first-eight budget. Link flag/count repair logic is unchanged.
+Pinned Apple hfs-627.100.6 hfs_catalog.c patch check/application PASS.
+Stage allowlist now1..27,32,82..87; last87. Next CI build and package into
+shim/out/munch-xnu-0021/testios.img with existing0017RAMdisk/physical iosroot
+args. No root reinstallation or storage geometry change needed. Need publish
+source updates (including local0020 commits), wait CI, collect/build boot.
+
+USB INSTALLER0020 COMPLETE / READY (2026-10-22):
+research/munch/usb-install-0020, folder6124510858bytes (~6.13GB).
+All7 SHA256SUMS PASS. Full16GiB gzip roundtrip through actual installer
+C SHA256 implementation PASS (usb-0020-roundtrip.sha256), raw hash
+4cfeeb332a85502239d89c09fa8a5f6729a55f56f38fb59bca9a1c333985c859.
+ZIP SHA256caab2be378edfd993e04c44f326cacbe34b4bafb206c7eca30e0c0dbbb6a6ee3.
+Included testios.img is unchanged0019, SHA256b025ed90a42473ed4d3bc5db54c5941f4b500bd3c8b9a9a701f9b987318f9faa.
+VMv6 verifies all38108 hard links, main-cache SHA256 against Apple source,
+and original critical executables/plist; native HFS before/after fsck PASS.
+User next: copy COMPLETE0020 folder to USB, TWRP Install its ZIP, wait for
+write/readback success, reboot bootloader and fastboot boot testios.img.
+Capture next photo. Package0020 has NOT been installed/booted on phone yet.
+No new kernel CI is required. Local source fix commit6e2bff5; final handoff
+and source publication still pending. Old0019 package is superseded.
+
+LINK REPAIR VERIFIED / PACKAGE0020 RUNNING (2026-10-22):
+VMv6 PASS: all38108 expected hard links resolve to their canonical inode;
+main-cache SHA25676874e8375252ee643011ff8063f0cce12355f05cf5f9897a34e5679667a65aa
+matches SystemOS export. Original launchd/dyld/plist hashes still match.
+Used11906060KiB/free4871156KiB. Native fsck-fn and header synchronization
+PASS, logs root-finalize-hfs-0020. Packager session5204 running into
+research/munch/usb-install-0020 with unchanged0019/testios.img. Wait for
+exit0 before user instructions, verify SHA256SUMS and gzip roundtrip using
+actual C writer --sha256. Root-full image has changed: old0755...hash is
+obsolete for this local image. Future archive generator emits .verify.sh
+for every hard link and includes cache hash; pass --verify-links to VM.
+Synthetic archive/repair fixtures and old-log packaging rejection PASS.
+Need finish package verification, record new raw hash and commit sources.
+
+2026-10-22 FULL-ROOT PHONE FAILURE / LINK REPAIR IN PROGRESS:
+Photo /mnt/c/Users/Olzhas0986/Downloads/5388944837400272322.jpg shows
+Apple launchd/libignition opening the system cache directory, followed by
+libSystem.B.dylib missing/no dyld cache and PID1 panic. Physical root mount
+and launchd execution are observed; installer readback log was not supplied.
+READ-ONLY local VM check cache-check-0019 reproduced the actual cause:
+/System/Library/Caches/com.apple.dyld exists but its main cache link DOES NOT.
+The original interrupted BusyBox tar deferred hard links until completion;
+VMv5 repaired symlinks only and incorrectly accepted the incomplete image.
+Prior package usb-install-0019 is therefore superseded; do not reinstall it.
+New tools/munch-repair-root-links.py builds payload-free repair tar with
+38108 surviving hard links plus symlinks, excluding 1997 shadow aliases.
+root-full-vm-6 is applying root-all-links-repair.tar to the LOCAL HFS image,
+then checking EVERY hard link with test -ef, plus main-cache presence/hash.
+VM and packager now reject missing cache; packager also requires link PASS.
+Synthetic repair fixture/quoting/drop/no-payload checks pass. Next: wait
+VMv6 PASS, native fsck/finalize, package into usb-install-0020 with SAME0019
+boot testios.img (no kernel change), verify compressed raw hash, update docs.
+No phone writes performed by this session; Android/GPT remain untouched.
+
 USB INSTALLER0019 READY AND VERIFIED: research/munch/usb-install-0019.
 Three gzipparts5995844478bytes total, completefolder~6.13GB (fits16GBUSB).
 Raw16GiBHFS SHA2560755ecf46d7227dd1e5b7937d5b28bb92f40fe5498c64eb634a74ac63399f7bb.

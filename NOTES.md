@@ -2,6 +2,58 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 XNU0023 PHOTO RESULT / AKS35 AND HFS RELOCATION:
+Nine Camera Roll WIN_20261022_10_01_18..10_33_25 photos reviewed. User says
+Apple logo appeared before these frames, then display stayed on last output.
+Logo origin/rendering path is NOT established by photos. SpringBoard calls
+IOSurface selector40; unsupported AKS35 floods searchd/remindd/wifianalyticsd/
+nanoregistryd; AKS10/31 also unsupported. Many non-display daemons crash;
+no kernel panic/MUNCH CRASH visible in these frames. Last photos repeatedly
+show hfs_clonefile: cluster_write failed - 34 (printf separator, positive
+error34). This function is internal file relocation, not an ordinary copy
+syscall; open-time defrag begins after3minutes and ignores relocation failure.
+Do NOT claim this message proves a UFS failure, ENOSPC, or the hang cause.
+Independent0092 implements observed AKS35 extended device state using the
+existing selector17 DER dictionary, plus known upstream103 notification query
+and101 assertion consume. Other unsupported operations still return errors.
+AKS errors now first3 per selector plus suppression note; success budget8.
+Independent0093 sets Munch mount's automatic open-time defrag threshold0;
+normal file I/O, explicit error handling and root bounds remain unchanged.
+This avoids optional relocation during bring-up, NOT a full fix of ERANGE.
+Stage last93; output munch-xnu-0024/testios.img. Patch checks against0023
+source and script syntax PASS. Need CI, AKS contract/error-budget host checks,
+compiled markers/new device-state cases validation, package/loader tests.
+Root0020 remains installed; do not reinstall or format storage.
+
+XNU0023 READY FOR PHONE (2026-10-22): CI39722455160 SUCCESS.
+Published source55d4c61694248135b066ec5cfe8e28a649a31f88; artifact12400979643.
+Kernel research/munch/xnu-run-39722455160/kernel.development.sweet SHA256
+cec4f59738e2f19e71b898c563bbce21172677642bdf22926a08e1c914f44bd1.
+Boot shim/out/munch-xnu-0023/testios.img,125628416bytes, SHA256
+4efc231f6ecc83d4b204f802bc3b01cd51f1531cf2c88f0a17b5b78275d82140.
+CI checksum/ARM64/manifest91 PASS. Compiled new exchange fallback marker,
+all four routine-log budget counter symbols, existing Sandbox/crash markers
+verified in kernel. Live RAM/UFS audit, exact v3 boot payload/root args and
+host-loader5prefixes/9malformed/segments/BSS/ADT/boot-args checks PASS.
+Exchange host guard/backend-error tests PASS; real persona persistence and
+new UI progress still require phone test. No0023 hardware result yet.
+Next user: temporary fastboot boot0023/testios.img; reuse installed root0020.
+Wait through initial startup, capture final screen and MUNCH HFS fallback
+result/MUNCH CRASH/reason/backboardd stderr. No root reinstall or GPT/Android
+changes needed. See docs/MUNCH_XNU_0023.md. Final docs commit remains local;
+CI source and prior0022 handoff/docs were published in55d4c61.
+
+XNU0023 CI RUNNING:39722455160, source
+55d4c61694248135b066ec5cfe8e28a649a31f88, local branch synchronized.
+Final0090 also prints first4 fallback results (MUNCH HFS ... result N).
+Host executes actual fallback block with vnode stubs: exact ENOTSUP/SWAP,
+regular same-root files required; all negative guards and backend error
+propagation PASS. New0090/91 patch application and script syntax PASS.
+Need CI artifact, compiled fallback marker, SHA/manifest91, package0023
+with existingRAMdisk0017/live.dtb, loader host/embedded header checks.
+docs/MUNCH_XNU_0023.md prepared. No0023 hardware result yet; do not claim
+full rename-swap semantics or persona persistence without a phone test.
+
 2026-10-22 XNU0022 PHONE PHOTOS REVIEWED:
 13 photos5391209827058522788..2801 (no2792) show Sandbox operations now
 reaching MUNCH policy and no repeated error159 denial flood. backboardd

@@ -1,0 +1,15 @@
+--- a/bsd/sweet_hfs/core/hfs_vfsops.c
++++ b/bsd/sweet_hfs/core/hfs_vfsops.c
+@@ -497,7 +497,12 @@
+ 		hfsmp = VFSTOHFS(mp);
+ 
+ 		/* Set up the maximum defrag file size */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++		/* Keep optional open-time relocation off during Munch bring-up. */
++		hfsmp->hfs_defrag_max = 0;
++#else
+ 		hfsmp->hfs_defrag_max = HFS_INITIAL_DEFRAG_SIZE;
++#endif
+ 
+ 
+ 		if (!data) {

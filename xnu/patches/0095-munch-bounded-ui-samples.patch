@@ -126,7 +126,7 @@
  
 --- /dev/null
 +++ b/bsd/dev/munch_sample.c
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,76 @@
 +/* Two diagnostic snapshots only, at approximately 60 and 120 seconds. */
 +#include <sys/param.h>
 +#include <sys/systm.h>
@@ -138,6 +138,8 @@
 +
 +extern task_t proc_task(proc_t);
 +extern int hz;
++/* This Mach-private termination entry is not in BSD exported headers. */
++extern void thread_terminate_self(void);
 +void munch_sample_start(void);
 +extern void munch_sample_task(const char *, int, task_t);
 +static char munch_sample_names[128];

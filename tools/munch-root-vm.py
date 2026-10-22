@@ -28,6 +28,7 @@ def main():
     p.add_argument('image', type=Path, help='existing blank HFS image file; never a device')
     p.add_argument('work', type=Path, help='new directory for initramfs and log')
     p.add_argument('--repair-plan', type=Path, help='validated symlink-only repair for this local image')
+    p.add_argument('--verify-links', type=Path, help='guest shell checks for every expected hard link')
     a = p.parse_args()
     runtime, archive, image = [x.resolve() for x in (a.runtime, a.archive, a.image)]
     assert image.is_file() and not image.is_symlink() and not str(image).startswith('/dev/')
@@ -91,6 +92,14 @@ echo MUNCH_ROOT_VM_PASS
 trap - EXIT
 poweroff -f
 '''
+    if a.verify_links:
+        entries.append(('verify-links.sh', 0o100644, a.verify_links.read_bytes()))
+        init = init.replace('df -k /target', 'sh /verify-links.sh\ndf -k /target')
+    # A directory alone does not prove that the shared-cache hard links survived tar.
+    init = init.replace('df -k /target',
+                        '[ -s /target/System/Library/Caches/com.apple.dyld/dyld_shared_cache_arm64 ]\n'
+                        'sha256sum /target/System/Library/Caches/com.apple.dyld/dyld_shared_cache_arm64\n'
+                        'echo MUNCH_ROOT_CACHE_PASS\ndf -k /target')
     entries.append(('init', 0o100755, init.encode()))
     initrd = a.work.resolve() / 'initramfs.cpio.gz'
     initrd.write_bytes(gzip.compress(cpio(entries), mtime=0))

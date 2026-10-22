@@ -7,6 +7,7 @@ import io
 import json
 from pathlib import Path
 import plistlib
+import shlex
 import stat
 import tarfile
 
@@ -154,7 +155,8 @@ def main():
             assert not record or not stat.S_ISLNK(record['mode']), ('entry below symlink', path, str(parent))
             parent = parent.parent
     assert not a.output.exists(), 'refusing to overwrite archive'
-    count = payload = 0
+    count = payload = hardlinks = 0
+    link_checks = ['#!/bin/sh', 'set -eu']
     partial = a.output.with_suffix(a.output.suffix + '.partial')
     assert not partial.exists()
     with partial.open('xb') as raw, tarfile.open(fileobj=raw, mode='w|', format=tarfile.PAX_FORMAT) as tar:
@@ -172,6 +174,9 @@ def main():
                 target = canonical(path)
                 assert stat.S_ISREG(entries[target]['mode'])
                 info.type, info.linkname = tarfile.LNKTYPE, target.lstrip('/')
+                link_checks.append('[ ' + shlex.quote('/target' + path) + ' -ef ' +
+                                   shlex.quote('/target' + target) + ' ]')
+                hardlinks += 1
             elif stat.S_ISREG(mode):
                 info.size = r['size']
                 src = io.BytesIO(r['data']) if 'data' in r else open(r['source'], 'rb')
@@ -187,8 +192,11 @@ def main():
             if count % 25000 == 0:
                 print(f'Archived {count} entries', flush=True)
     partial.rename(a.output)
+    link_checks.append(f'echo MUNCH_ROOT_HARDLINKS_PASS_{hardlinks}')
+    a.output.with_suffix('.verify.sh').write_text('\n'.join(link_checks) + '\n')
     critical = {path: hashlib.sha256(read(path)).hexdigest() for path in
-                ['/sbin/launchd', '/usr/lib/dyld', '/System/Library/xpc/launchd.plist']}
+                ['/sbin/launchd', '/usr/lib/dyld', '/System/Library/xpc/launchd.plist',
+                 '/System/Library/Caches/com.apple.dyld/dyld_shared_cache_arm64']}
     a.output.with_suffix('.complete.json').write_text(json.dumps(
         {'entries': count, 'payload_bytes': payload, 'archive_bytes': a.output.stat().st_size,
          'critical_sha256': critical}, indent=2) + '\n')

@@ -48,7 +48,7 @@
 +#endif
 --- /dev/null
 +++ b/iokit/Kernel/arm/hid/MunchDigitizer.cpp
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,290 @@
 +/* Munch FT3658U: SPI FIFO transport and coherent HID digitizer frames. */
 +#include <IOKit/IOLib.h>
 +#include <IOKit/IOWorkLoop.h>
@@ -169,10 +169,18 @@
 +        storeReg(bus.gcc, 0x174d0, loadReg(bus.gcc, 0x174d0) | 1);
 +        if (!clearWithin(bus.gcc, 0x174d0, 1)) return false;
 +    }
-+    const unsigned branch[] = {0x17004, 0x17008, 0x23000, 0x23008, 0x174cc};
-+    for (unsigned i = 0; i < 5; ++i) if (!clearWithin(bus.gcc, branch[i], 1u << 31)) {
-+        IOLog("MUNCH TOUCH: halted branch %#x\n", branch[i]); return false;
++    /* QUP0 S-AHB (0x17008) has HWCG and may report HALT while idle.
++     * A voted clock is not necessarily running until its first access.
++     * Do not abort on this idle-state indication. */
++    IOLog("MUNCH TOUCH: QUP0 m-ahb=%#x s-ahb=%#x se4=%#x vote=%#x\n",
++          loadReg(bus.gcc, 0x17004), loadReg(bus.gcc, 0x17008),
++          loadReg(bus.gcc, 0x174cc), loadReg(bus.gcc, 0x52008));
++    if (!clearWithin(bus.gcc, 0x17004, 1u << 31) ||
++        !clearWithin(bus.gcc, 0x174cc, 1u << 31)) {
++        IOLog("MUNCH TOUCH: master or SE4 clock halted; stopped\n");
++        return false;
 +    }
++    IOLog("MUNCH TOUCH: clock checks passed; mapping GENI SE4\n");
 +    bus.engine = ml_io_map(0x990000, 0x4000);
 +    bus.north = ml_io_map(0xf900000, 0xc000);
 +    bus.south = ml_io_map(0xf500000, 0x28000);

@@ -2,13 +2,63 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 XNU0021 PHONE PHOTOS / SANDBOX FAILURE:
+Six Windows Downloads photos5391209827058522778..2783 reviewed. launchd
+starts SpringBoard/backboardd and many Apple daemons from installed root0020.
+Photos show repeated error159 Sandbox restriction for Mach service lookup:
+logd, mobilegestalt, containermanagerd, notification_center, sleepd, etc.
+SpringBoard123, backboardd120, configd119 and mediaserverd107 crash/restart.
+No kernel panic or GUI is shown. DYLD unnest warnings do not by themselves
+establish a cache failure. This is now real Apple userspace initialization.
+Exact0021 CI source has no registered Sandbox MAC policy. Upstream0050
+addresses the same ENOPOLICY failure; independent0088 adapts it to Munch.
+Development permissive policy accepts checks/profile setup; data-returning
+container/extension calls return ENOENT, not fabricated tokens/paths.
+Independent0089 adapts ONLY crash diagnostics from0043/44 and stderr tee0048,
+not unrelated AKS changes or persistent storage logging. It prints signal,
+user registers, ten FP frames, cache slide/main header, and exit reason.
+Diagnostics limited to first3 crashes EACH of SpringBoard/backboardd/configd;
+stdout/stderr null tee defaults to SpringBoard/backboardd (munchnull=- off).
+Remove launchd_log_serial=1 to stop verbose lifecycle log flooding. New boot
+output shim/out/munch-xnu-0022/testios.img, stage last89/allowlist adds88/89.
+Both patches apply to exactCI0021 source, no MMIO/UFS/GPT changes or root
+reinstall. Need publish/run CI, validate helper contracts, build/check image.
+
+XNU0021 READY FOR PHONE (2026-10-22): CI39710590206 PASSED.
+Published source a4025346c9421314aebf0b5d49e48ba282d690a1, artifact12397735930.
+Kernel research/munch/xnu-run-39710590206/kernel.development.sweet SHA256
+e3a46b89f2678c9188810b1664ec0dfeb762424e25c6c4d46cdf62a7ba9773b2.
+Boot shim/out/munch-xnu-0021/testios.img,125628416bytes, SHA256
+da9b45ff18d67144c48436b0de79ca1447d098ac1909d4f01d255a6a0b31fdac.
+Only kernel change is0087 bounded HFS link diagnostic messages; shared
+counter emits nine notes (OSIncrementAtomic returns pre-increment value).
+Root0020 stays installed. Existing RAMdisk0017 and iosroot/UFS args reused.
+Pinned HFS patch application and actual-counter host test pass; CI kernel
+manifest/checksum/ARM64 checks and liveFDT RAM/UFS audit PASS. Boot image
+header/payload and host-loader segment/BSS/ADT/malformed-input checks PASS.
+Next user: temporary fastboot boot this0021/testios.img, capture next visible
+errors/panic. No0021 hardware result yet. See docs/MUNCH_XNU_0021.md.
+The previous0020 no-dyld-cache repair is installed per user's HFS log report;
+full userland startup/UI remain unverified. Do not reinstall root or change
+GPT/Android. Final docs/handoff commit is local; kernel source is published.
+
+XNU0021 CI RUNNING:39710590206, published main commit
+a4025346c9421314aebf0b5d49e48ba282d690a1. Local branch synchronized to this
+published tree. Actual OSIncrementAtomic uses old-value return: <=8 means
+nine initial notes, not eight; tested correct original-value semantics with
+10000 calls. New docs/MUNCH_XNU_0021.md prepared, pending final image/hash.
+Wait for CI, download munch-xnu-early artifact into
+research/munch/xnu-run-39710590206, then:
+bash shim/munch/build-xnu.sh research/munch/xnu-run-39710590206/kernel.development.sweet ../live.dtb shim/out/munch-init-0017/root.hfs
+Output shim/out/munch-xnu-0021/testios.img. Reuse installed root0020.
+
 2026-10-22 PHONE0020 / HFS LINK LOG FLOOD:
 User reports repeated hfs: set hardlink bit on vol=MunchIOS with varying
 cnid/inoid, hiding subsequent errors. Full root/package0020 has now been
 booted, but no readable downstream failure is available. This is Apple's
 HFS lookup repairing Linux-created hard-link flags, not by itself a panic.
 Independent0087 imports upstream0041's three printf guards, with a shared
-atomic first-eight budget. Link flag/count repair logic is unchanged.
+atomic first-nine budget. Link flag/count repair logic is unchanged.
 Pinned Apple hfs-627.100.6 hfs_catalog.c patch check/application PASS.
 Stage allowlist now1..27,32,82..87; last87. Next CI build and package into
 shim/out/munch-xnu-0021/testios.img with existing0017RAMdisk/physical iosroot

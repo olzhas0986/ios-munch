@@ -2,6 +2,23 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 XNU0025 PHONE RESULT / XNU0026 PREPARED:
+User reports Apple logo unchanged after 20 minutes with graphics0025; no
+new panic reported. Quiet output therefore did not expose a working UI.
+Root cause remains unknown. Independent0095 adds only bounded diagnostics:
+two best-effort SpringBoard/backboardd snapshots at roughly60/120 seconds,
+max4threads/task and8frames/thread; task references retained and task lock
+released before faultable user-memory reads. Kernel sampler exits afterward;
+munchsample=- disables it. No new userspace daemon or root reinstall.
+Crash budgets expanded to analyticsd/installcoord*/mobileactivat* (first3
+per service), corpse-limit console notes limited to12 plus suppression,
+without changing corpse handling. Actual extracted selection/crash helpers
+and patch application PASS; Python/shell syntax PASS. Stage last95/output0026.
+Need CI compile/artifact, package normal console0026, loader/header checks,
+and phone photos of MUNCH SMP / MUNCH CRASH. Preserve installed0020 root,
+Android/GPT/UFS bounds and safe console0094. No functional UI fix claimed.
+
+
 XNU0025 GRAPHICS FIX READY FOR PHONE (2026-10-22):
 CI39735617667 SUCCESS, source0df35d8a8ab10c946490af5d6769ed2926505cfe,
 artifact12407556825. Kernel research/munch/xnu-run-39735617667/kernel.development.sweet

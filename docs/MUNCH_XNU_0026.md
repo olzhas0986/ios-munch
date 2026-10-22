@@ -19,5 +19,28 @@ notice; corpse handling is unchanged.
 
 Use the normal console profile for this test. It retains the 0025 console
 panic fix, the existing installed root and bounded iosroot storage access.
-No root reinstall or partition changes are needed. Build/artifact validation
-and the phone result are pending.
+No root reinstall or partition changes are needed.
+
+CI run 39742369848 succeeded for source
+`d0ff73bf638aad026080c03f8beb7f0b695d3525`; kernel artifact 12410322719.
+Kernel SHA-256:
+`74954ee6ff81df2ced5f7775f145db6334e47471ef63a237572f079757d57a17`.
+
+Image: `shim/out/munch-xnu-0026/testios.img` (125628416 bytes).
+SHA-256: `d9cad98fcdee8a8fb2886cfde1c0cf721b20825291d8ac280dd6f4b61f510d29`.
+
+Manifest and source hashes, compiled diagnostic markers, safe console layout,
+boot v3 header, embedded payload, physical-root arguments and ADT mapping
+verified. Loader host harness passed five vendor prefixes and rejected nine
+malformed inputs. The initial CI failed on a missing BSD-visible declaration
+of the Mach-private thread termination entry; the published source fixes it.
+
+Temporary boot from Windows:
+
+```bat
+fastboot boot "\\wsl.localhost\archlinux\home\olzhas0986\ios-munch\upstream\shim\out\munch-xnu-0026\testios.img"
+```
+
+Photograph `MUNCH SMP` and `MUNCH CRASH` output after approximately one and
+two minutes. Allow three minutes for this test; include the `matched` line
+if neither UI process is found. The 0026 phone result is pending.

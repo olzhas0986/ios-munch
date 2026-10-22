@@ -2,7 +2,107 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 XNU0027 PHOTOS / XNU0028 ACL TEST PREPARED:
+Reviewed all20photos Downloads/5390970928092617101..7120.jpg via contacts,
+full-size7114/7116/7119. installcoordinat crash reason namespace18/code2:
+Failed to create data directory, NSPOSIXErrorDomain Code=13 (EACCES), line171.
+profiled[135] alive both snapshots, SpringBoard[26] alive. Slide0x431f0000.
+DSC actual local symbols: sample1 profiled NSFileAttributes _attributesAtPath,
+MCCheckSystemGroupContainerFileReadability block; sample2 MCFileAccessRepairTool
+fileNeedsRepairAtPath -> MCDictionaryWriter repairAccessIfNecessaryWithError,
+serializeDataAndWriteToStorage -> write. These support an ACL/container access
+lead; exact caller paths private/redacted, not proven on screen.
+profiled stderr CFURLCopyResourcePropertyForKey URL has no scheme. Secondary
+analyticsd SIGSEGV FAR0/mobileactivation SIGTRAP remain separate observations.
+0096 adapts upstream0057 config-only: remove config_ext_resolver from
+FILESYS_BASE, use kernel UID/GID compatibility group resolution without
+missing memberd/opendirectoryd. No chmod/ACL removal/crypto success stubs.
+Hypothesis consistent with proven upstream installcoordinationd EACCES cause;
+Munch GUI fix remains unverified. Stage96, next output0028/0028-profiled.
+Patch applies to actual staged config; syntax validation pending below.
+Need publish source/build once; no CI polling (user reports completion).
+
+
+XNU0027 PROFILED DIAGNOSTIC READY (2026-10-22):
+User authorized continuing profiled investigation. Actual launchd plist has
+MachServices com.apple.managedconfiguration.profiled[.public], runs as mobile,
+adaptive/on-demand with path/notification keepalive; no missing job proven.
+Reuse successful0026 kernel CI39742369848, source d0ff73b, manifest95;
+NO kernel source changes/new CI. Added build-xnu.sh --profiles option:
+normal console, munchsample=SpringBoard,profiled and munchnull=profiled.
+Output shim/out/munch-xnu-0027-profiled/testios.img,125628416bytes, SHA256
+2f00a101895729fdb2496e3a2c99ceff96068839ad2830c930cf39c37487a077.
+Kernel/RAMdisk all11segments byte-identical to0026. Kernel checksum/manifest/
+provider hashes, liveFDT audit, v3/exactpayload, physicalroot args, ADT mapping,
+loader5prefixes/9malformed inputs PASS. Check /tmp/munch-0027-image-check.py
+and shim/out/munch-xnu-0027-profiled/image-check.json.
+Next phone temporary boot0027-profiled, photograph MUNCH SMP profiled and
+SpringBoard at1/2minutes plus |profiled| stderr. matched1 only proves profiled
+not present at sampling time, not why; current crash-report allowlist excludes
+profiled, and stdout/stderr tee does not capture os_log. Do not infer absence
+of crash from no MUNCH CRASH profiled. No functional fix claimed; no crypto,
+rootfs,partition changes. No0027 phone result yet; no need wait for CI.
+
+
+2026-10-22 XNU0026 PHONE SAMPLES RECEIVED:
+Photos Downloads/5390970928092617072.jpg and5390970928092617074.jpg.
+Both snapshots match SpringBoard[25] and backboardd[56]; no restart of those
+between samples. Apple logo remains; fileproviderd Sandbox op7 later is
+only a diagnostic note, not proof of denial. analyticsd[145] sig11 FAR0,
+shared slide0xd330000, mh0x104b94000; repeated secondary corpse notes then
+suppression works. Sample2 SpringBoard t0/t3 include0x18e53c224,
+0x18e4d5cb0,0x18e4d46e0; actual local DSC symbols with slide subtracted map
+to NSXPCCONNECTION_IS_WAITING_FOR_A_SYNCHRONOUS_REPLY+0xc,
+NSXPCConnection _sendInvocation...+0x7e8, _sendSelector...+0x70.
+Sample1 SpringBoard t0 includes NSData file reads, MCHasMigrated block,
+MCProfileConnection sharedConnection and needsCheckIn. Backboardd t0 is
+CFRunLoopServiceMachPort/CFRunLoopRun, t3 CA::Render::Server::server_thread.
+Symbol lookup /tmp/munch-photo-symbols.py uses the actual local20H392 DSC
+.symbols nlist; nearest local symbol alone is unreliable for stripped public
+syscall stubs (do not call those memcpy/commpage without export lookup).
+Interpretation: UI processes alive, SpringBoard waiting synchronously in
+XPC; profile configuration service is a lead, not confirmed root cause.
+AKS profiled selector31 returns0xe00002c7; do not invent crypto success.
+Next inspect actual SpringBoard main binary callsites/MCProfileConnection
+and profiled service state; extend targeted sampler if needed, not blind UI
+or crypto changes. No new patch/build launched. User handles CI completion
+notifications; do not poll. Current0026 root/image remain unchanged.
+
+
+XNU0026 READY FOR PHONE (2026-10-22):
+User reported CI complete. Verified CI39742369848 SUCCESS, source
+ d0ff73bf638aad026080c03f8beb7f0b695d3525, artifact12410322719.
+Kernel research/munch/xnu-run-39742369848/kernel.development.sweet SHA256
+74954ee6ff81df2ced5f7775f145db6334e47471ef63a237572f079757d57a17.
+Normal diagnostic image shim/out/munch-xnu-0026/testios.img,125628416bytes,
+SHA256 d9cad98fcdee8a8fb2886cfde1c0cf721b20825291d8ac280dd6f4b61f510d29.
+Compiled sampler/crash suppression markers present; CI checksum/manifest95
+and all provider hashes verified. Console mute remains writable and selector
+protected; framebuffer has no unsafe console switch call. Native boot v3,
+exact payload/kernel,11segments,RAMdisk,physicalroot args,ADT RAMDisk property,
+loader5prefixes/9malformed checks PASS. Temporary checker initially compared
+unaugmented ADT with packaged ADT: corrected to verify added RAMDisk mapping
+and exact remaining tree, then PASS; no image change needed.
+User should temporary boot normal0026, photograph MUNCH CRASH and MUNCH SMP
+at1/2minutes (allow3minutes), including matched count if no UI processes.
+No0026 phone result yet. No root reinstall. Installed0020/Android/GPT preserved.
+Do not resume CI polling; user requested reporting build completion manually.
+This entry supersedes older queued/pending statements below.
+
+
 2026-10-22 XNU0025 PHONE RESULT / XNU0026 PREPARED:
+USER REQUEST: stop polling CI; user will report when build completes.
+Repeat CI39742369848 for d0ff73bf638aad026080c03f8beb7f0b695d3525 was queued
+at last check. Local HEAD synchronized to published source. Next: retrieve
+its successful artifact, run build-xnu.sh normal console0026, then
+/tmp/munch-0026-image-check.py and /tmp/munch-0025-check-layout.py on kernel.
+Host helpers /tmp/munch-0026-test.py PASS. No0026 image exists yet.
+First CI39741597255 failed: BSD exported kern/thread.h omits Mach-private
+thread_terminate_self declaration; sample task code itself compiled. Explicit
+matching declaration added; fixed source d0ff73bf638aad026080c03f8beb7f0b695d3525
+published, repeat CI pending. Host patch/helper checks repeated PASS.
+Published source8959be8b29d1f12d668d58b9523f169194f29060; CI39741597255
+in progress (Build early XNU). Local branch synchronized to munch/main.
 User reports Apple logo unchanged after 20 minutes with graphics0025; no
 new panic reported. Quiet output therefore did not expose a working UI.
 Root cause remains unknown. Independent0095 adds only bounded diagnostics:

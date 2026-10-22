@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: macOS runner (macos-14 retires November 2, 2026)
+        description: macOS build host (Intel avoids ARM runner capacity constraints)
         type: choice
-        options: [macos-14, macos-15]
-        default: macos-14
+        options: [macos-15-intel, macos-15, macos-14]
+        default: macos-15-intel
   push:
     branches: [main, munch-bringup]
     paths:
@@ -35,7 +35,7 @@ env:
 
 jobs:
   build:
-    runs-on: ${{ inputs.runner || 'macos-14' }}
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

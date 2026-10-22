@@ -1,0 +1,494 @@
+--- /dev/null
++++ b/iokit/Kernel/arm/hid/FT3658Format.h
+@@ -0,0 +1,45 @@
++/* FT3658U normal read response: two header bytes, ten slots, gesture tail. */
++#ifndef MUNCH_FT3658_FORMAT_H
++#define MUNCH_FT3658_FORMAT_H
++#include <stdint.h>
++#include <stddef.h>
++struct FT3658Point { uint16_t x, y; uint8_t id, down; };
++struct FT3658Frame { FT3658Point point[10]; unsigned count, downMask; };
++static inline uint16_t ft3658Checksum(const uint8_t *data, size_t count)
++{
++    uint16_t value = 0xffff;
++    for (size_t i = 0; i < count; ++i) {
++        value ^= data[i];
++        for (unsigned bit = 0; bit != 8; ++bit)
++            value = (uint16_t)((value >> 1) ^ ((value & 1) ? 0x8408 : 0));
++    }
++    return value;
++}
++static inline bool ft3658Unpack(const uint8_t *response, size_t length, FT3658Frame &frame)
++{
++    if (!response || length != 99 || (response[3] & 0xa0)) return false;
++    const uint8_t *data = response + 7;
++    if (ft3658Checksum(data, 90) != (uint16_t)(response[97] | ((unsigned)response[98] << 8))) return false;
++    unsigned expected = data[1] & 15;
++    if (expected > 10) return false;
++    FT3658Frame next = {};
++    unsigned used = 0, down = 0;
++    for (unsigned slot = 0; slot < 10; ++slot) {
++        const uint8_t *p = data + 2 + slot * 6;
++        unsigned id = p[2] >> 4, kind = p[0] >> 6;
++        if (id == 15) break;
++        if (id >= 10 || (used & (1u << id)) || kind == 3) return false;
++        unsigned x = ((p[0] & 15) << 12) | (p[1] << 4) | (p[4] >> 4);
++        unsigned y = ((p[2] & 15) << 12) | (p[3] << 4) | (p[4] & 15);
++        bool touching = kind != 1;
++        if (touching && (x > 1080 * 16 || y > 2400 * 16)) return false;
++        x /= 16; y /= 16;
++        next.point[next.count++] = {(uint16_t)(x < 1080 ? x : 1079), (uint16_t)(y < 2400 ? y : 2399), (uint8_t)id, (uint8_t)touching};
++        used |= 1u << id;
++        if (touching) { next.downMask |= 1u << id; down++; }
++    }
++    if (down != expected) return false;
++    frame = next;
++    return true;
++}
++#endif
+--- /dev/null
++++ b/iokit/Kernel/arm/hid/MunchDigitizer.cpp
+@@ -0,0 +1,282 @@
++/* Munch FT3658U: SPI FIFO transport and coherent HID digitizer frames. */
++#include <IOKit/IOLib.h>
++#include <IOKit/IOWorkLoop.h>
++#include <IOKit/IOTimerEventSource.h>
++#include <pexpert/pexpert.h>
++#include <mach/mach_types.h>
++#include "IOHIDEventService.h"
++#include "IOHIDEvent.h"
++#include "IOHIDUsageTables.h"
++#include "FT3658Format.h"
++extern "C" vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern "C" uint64_t mach_absolute_time(void);
++bool munchEnableTouchPower(void);
++
++struct MunchSPI {
++    vm_offset_t engine, gcc, north, south;
++    unsigned fifo;
++    bool unusable;
++};
++static uint32_t loadReg(vm_offset_t base, unsigned reg)
++{
++    uint32_t result = *(volatile uint32_t *)(base + reg);
++    __asm__ volatile("dmb oshld" ::: "memory");
++    return result;
++}
++static void storeReg(vm_offset_t base, unsigned reg, uint32_t value)
++{
++    __asm__ volatile("dmb oshst" ::: "memory");
++    *(volatile uint32_t *)(base + reg) = value;
++    __asm__ volatile("dsb osh" ::: "memory");
++}
++static bool clearWithin(vm_offset_t base, unsigned reg, uint32_t mask)
++{
++    for (unsigned tries = 0; tries < 2000; ++tries) {
++        if (!(loadReg(base, reg) & mask)) return true;
++        IODelay(1);
++    }
++    return false;
++}
++static void configurePin(vm_offset_t tile, unsigned gpio, unsigned mux, unsigned pull, unsigned drive, bool output, bool high = true)
++{
++    unsigned cfg = gpio * 4096;
++    if (output) storeReg(tile, cfg + 4, (loadReg(tile, cfg + 4) & ~2u) | (high ? 2u : 0u));
++    uint32_t old = loadReg(tile, cfg);
++    storeReg(tile, cfg, (old & ~0x3ffu) | (mux << 2) | pull | (drive << 6) | (output ? 0x200 : 0));
++}
++static void abortSPI(MunchSPI &bus)
++{
++    storeReg(bus.engine, 0x604, 2);
++    bool acknowledged = false;
++    for (unsigned i = 0; i < 2000; ++i) {
++        if (loadReg(bus.engine, 0x610) & (1u << 5)) { acknowledged = true; break; }
++        IODelay(1);
++    }
++    bus.unusable = !acknowledged || !clearWithin(bus.engine, 0x40, 1);
++    for (unsigned i = 0; i < 64; ++i) {
++        if (!(loadReg(bus.engine, 0x804) & 0x1ffffff)) break;
++        (void)loadReg(bus.engine, 0x780);
++    }
++    storeReg(bus.engine, 0x618, 0xffffffff);
++}
++static bool exchangeSPI(MunchSPI &bus, uint8_t command, unsigned bytes, uint8_t response[128])
++{
++    uint8_t request[128] = {};
++    if (bus.unusable || !bytes || bytes > 119 || (loadReg(bus.engine, 0x40) & 1)) return false;
++    unsigned length = bytes + 9, tx = 0, rx = 0;
++    request[0] = command; request[1] = 0xa0; request[2] = bytes >> 8; request[3] = bytes;
++    storeReg(bus.engine, 0x618, 0xffffffff);
++    storeReg(bus.engine, 0x26c, length);
++    storeReg(bus.engine, 0x270, length);
++    storeReg(bus.engine, 0x600, 3u << 27);
++    for (unsigned attempt = 0; attempt < 5000; ++attempt) {
++        uint32_t irq = loadReg(bus.engine, 0x610);
++        if (irq & (0xeu | (1u << 9) | (1u << 10) | (1u << 12) | (1u << 13))) break;
++        unsigned available = loadReg(bus.engine, 0x804) & 0x1ffffff;
++        if (available > 64 || available > length - rx) break;
++        while (available--) response[rx++] = (uint8_t)loadReg(bus.engine, 0x780);
++        unsigned occupied = loadReg(bus.engine, 0x800) & 0xfffffff;
++        if (occupied > bus.fifo) break;
++        unsigned space = bus.fifo - occupied;
++        while (space && tx < length) { storeReg(bus.engine, 0x700, request[tx++]); space--; }
++        if ((irq & 1) && tx == length && rx == length) {
++            storeReg(bus.engine, 0x618, irq);
++            IODelay(150);
++            return true;
++        }
++        IODelay(1);
++    }
++    abortSPI(bus);
++    IODelay(150);
++    return false;
++}
++static bool readSPI(MunchSPI &bus, uint8_t reg, unsigned bytes, uint8_t response[128])
++{
++    for (unsigned retry = 0; retry < 3 && !bus.unusable; ++retry) {
++        if (exchangeSPI(bus, reg, bytes, response) && !(response[3] & 0xa0)) {
++            uint16_t received = response[bytes + 7] | ((unsigned)response[bytes + 8] << 8);
++            if (ft3658Checksum(response + 7, bytes) == received) return true;
++        }
++        IODelay(150);
++    }
++    return false;
++}
++static bool startSPI(MunchSPI &bus)
++{
++    bus.gcc = ml_io_map(0x100000, 0x53000);
++    if (!bus.gcc) return false;
++    /* Only QUP0 AHB/core and SE4 branch votes; no shared PLL changes. */
++    storeReg(bus.gcc, 0x52008, loadReg(bus.gcc, 0x52008) | 0x43c0);
++    uint32_t config = loadReg(bus.gcc, 0x174d4), dfs = loadReg(bus.gcc, 0x174e4);
++    IOLog("MUNCH TOUCH: clocks vote=%#x cfg=%#x dfs=%#x\n", loadReg(bus.gcc, 0x52008), config, dfs);
++    if (dfs & 1) {
++        if ((loadReg(bus.gcc, 0x174ec) & 0x371f) != 1) {
++            IOLog("MUNCH TOUCH: unsupported DFS parent; stopped\n"); return false;
++        }
++    } else {
++        storeReg(bus.gcc, 0x174d4, (config & ~0x10371fu) | 1);
++        storeReg(bus.gcc, 0x174d0, loadReg(bus.gcc, 0x174d0) | 1);
++        if (!clearWithin(bus.gcc, 0x174d0, 1)) return false;
++    }
++    const unsigned branch[] = {0x17004, 0x17008, 0x23000, 0x23008, 0x174cc};
++    for (unsigned i = 0; i < 5; ++i) if (!clearWithin(bus.gcc, branch[i], 1u << 31)) {
++        IOLog("MUNCH TOUCH: halted branch %#x\n", branch[i]); return false;
++    }
++    bus.engine = ml_io_map(0x990000, 0x4000);
++    bus.north = ml_io_map(0xf900000, 0xc000);
++    bus.south = ml_io_map(0xf500000, 0x28000);
++    if (!bus.engine || !bus.north || !bus.south) return false;
++    uint32_t fw = loadReg(bus.engine, 0x68), status = loadReg(bus.engine, 0x40);
++    IOLog("MUNCH TOUCH: SE4 fw=%#x status=%#x reset=%#x irq=%#x\n", fw, status,
++        loadReg(bus.south, 33 * 4096 + 4), loadReg(bus.south, 39 * 4096 + 4));
++    if (((fw >> 8) & 255) != 1 || (status & 0x1001)) {
++        IOLog("MUNCH TOUCH: missing SPI sequencer or busy engine; stopped\n"); return false;
++    }
++    unsigned hw = loadReg(bus.engine, 0xe24);
++    bus.fifo = (hw >> 16) & 63;
++    if (((hw >> 24) & 63) != 32 || bus.fifo < 2 || (loadReg(bus.engine, 0x64) & 1)) {
++        IOLog("MUNCH TOUCH: unsupported FIFO %#x\n", hw); return false;
++    }
++    for (unsigned pin = 8; pin <= 11; ++pin) configurePin(bus.north, pin, 1, 0, 2, false);
++    configurePin(bus.south, 33, 0, 3, 3, true, false);
++    IOSleep(1);
++    if (!munchEnableTouchPower()) { IOLog("MUNCH TOUCH: supply initialization failed\n"); return false; }
++    storeReg(bus.south, 33 * 4096 + 4, loadReg(bus.south, 33 * 4096 + 4) | 2);
++    IOSleep(200);
++    configurePin(bus.south, 39, 0, 3, 3, false);
++    storeReg(bus.engine, 0x28, loadReg(bus.engine, 0x28) | 0x7f);
++    storeReg(bus.engine, 0xe30, loadReg(bus.engine, 0xe30) | 0xf);
++    storeReg(bus.engine, 0x24, 0x7f); storeReg(bus.engine, 0x20, 1);
++    storeReg(bus.engine, 0x7c, 0); storeReg(bus.engine, 0x48, 0x41);
++    const unsigned zero[] = {0x224,0x22c,0x230,0x24c,0x250,0x25c,0x278,0x264,0x288,0x254,0x258,0xe18,0x614,0xe1c};
++    for (unsigned i = 0; i < sizeof(zero) / sizeof(zero[0]); ++i) storeReg(bus.engine, zero[i], 0);
++    storeReg(bus.engine, 0x268, 4); /*8-bit SPI word*/
++    storeReg(bus.engine, 0x260, 0xff); storeReg(bus.engine, 0x284, 0xff); /*one byte/FIFO word*/
++    uint8_t response[128] = {}, high = 0;
++    if (readSPI(bus, 0xa3, 1, response)) high = response[7];
++    if (!readSPI(bus, 0x9f, 1, response) || high != 0x56 || response[7] != 0x52) {
++        IOLog("MUNCH TOUCH: no FT3658U ID (hi=%#x); check L10C/L1C and controller firmware\n", high); return false;
++    }
++    IOLog("MUNCH TOUCH: FT3658U 56:52, SPI 4.8MHz ready\n");
++    return true;
++}
++
++class MunchDigitizer : public IOHIDEventService {
++    OSDeclareDefaultStructors(MunchDigitizer);
++public:
++    bool start(IOService *) APPLE_KEXT_OVERRIDE;
++    void stop(IOService *) APPLE_KEXT_OVERRIDE;
++    void free(void) APPLE_KEXT_OVERRIDE;
++    IOWorkLoop *getWorkLoop(void) const APPLE_KEXT_OVERRIDE;
++protected:
++    UInt32 getPrimaryUsagePage() APPLE_KEXT_OVERRIDE { return kHIDPage_Digitizer; }
++    UInt32 getPrimaryUsage() APPLE_KEXT_OVERRIDE { return kHIDUsage_Dig_TouchScreen; }
++    UInt32 getProductID() APPLE_KEXT_OVERRIDE { return 0x3658; }
++private:
++    static void tick(OSObject *, IOTimerEventSource *);
++    void consume(const FT3658Frame &);
++    IOWorkLoop *work;
++    IOTimerEventSource *timer;
++    MunchSPI bus;
++    FT3658Point previous[10];
++    bool edge[10];
++    unsigned active, errors, notes;
++    bool initialized;
++};
++OSDefineMetaClassAndStructors(MunchDigitizer, IOHIDEventService);
++IOWorkLoop *MunchDigitizer::getWorkLoop(void) const { return work; }
++bool MunchDigitizer::start(IOService *provider)
++{
++    int enabled = 1;
++    PE_parse_boot_argn("munchtouch", &enabled, sizeof(enabled));
++    if (!enabled) return false;
++    work = IOWorkLoop::workLoop();
++    if (!work || !IOHIDEventService::start(provider)) return false;
++    setProperty("DisplayIntegrated", kOSBooleanTrue);
++    setProperty("SurfaceWidth", (unsigned long long)(68 << 16), 32);
++    setProperty("SurfaceHeight", (unsigned long long)(151 << 16), 32);
++    timer = IOTimerEventSource::timerEventSource(this, &MunchDigitizer::tick);
++    if (!timer || work->addEventSource(timer) != kIOReturnSuccess) return false;
++    registerService();
++    IOLog("MUNCH TOUCH: HID digitizer registered\n");
++    timer->setTimeoutMS(1500);
++    return true;
++}
++void MunchDigitizer::consume(const FT3658Frame &frame)
++{
++    FT3658Point next[10] = {};
++    for (unsigned i = 0; i < frame.count; ++i) next[frame.point[i].id] = frame.point[i];
++    unsigned changed = active ^ frame.downMask;
++    for (unsigned i = 0; i < 10; ++i) {
++        if ((frame.downMask & (1u << i)) && (previous[i].x != next[i].x || previous[i].y != next[i].y)) changed |= 1u << i;
++        if (!(active & (1u << i)) && (frame.downMask & (1u << i)))
++            edge[i] = next[i].x < 48 || next[i].x >= 1032 || next[i].y < 48 || next[i].y >= 2352;
++    }
++    if (!changed) return;
++    uint64_t now = mach_absolute_time();
++    IOHIDEvent *group = IOHIDEvent::digitizerEvent(now, 0, kIOHIDDigitizerTransducerTypeHand, false, 0, 0, 0);
++    if (!group) return;
++    group->setIntegerValue(kIOHIDEventFieldDigitizerCollection, 1);
++    unsigned combined = 0;
++    bool complete = true;
++    for (unsigned i = 0; i < 10; ++i) {
++        unsigned bit = 1u << i;
++        if (!((active | frame.downMask) & bit)) continue;
++        bool down = (frame.downMask & bit) != 0;
++        FT3658Point point = down ? next[i] : previous[i];
++        IOFixed x = (IOFixed)(((uint64_t)point.x << 16) / 1080), y = (IOFixed)(((uint64_t)point.y << 16) / 2400);
++        IOHIDEvent *child = IOHIDEvent::digitizerEvent(now, i + 2, kIOHIDDigitizerTransducerTypeFinger, down, down ? 1 : 0, x, y);
++        if (!child) { complete = false; break; }
++        unsigned flags = edge[i] ? kIOHIDDigitizerEventFromEdgeTip : 0;
++        if ((active ^ frame.downMask) & bit) flags |= kIOHIDDigitizerEventTouch | kIOHIDDigitizerEventRange;
++        if (!(active & bit) && down) flags |= kIOHIDDigitizerEventIdentity;
++        if ((changed & bit) && down) flags |= kIOHIDDigitizerEventPosition;
++        child->setIntegerValue(kIOHIDEventFieldDigitizerIndex, i);
++        child->setIntegerValue(kIOHIDEventFieldDigitizerIdentity, i + 2);
++        child->setIntegerValue(kIOHIDEventFieldDigitizerTouch, down);
++        child->setIntegerValue(kIOHIDEventFieldDigitizerEventMask, flags);
++        group->appendChild(child); child->release(); combined |= flags;
++        group->setFixedValue(kIOHIDEventFieldDigitizerX, x); group->setFixedValue(kIOHIDEventFieldDigitizerY, y);
++    }
++    if (complete) {
++        group->setIntegerValue(kIOHIDEventFieldDigitizerRange, frame.downMask != 0);
++        group->setIntegerValue(kIOHIDEventFieldDigitizerTouch, frame.downMask != 0);
++        group->setIntegerValue(kIOHIDEventFieldDigitizerButtonMask, frame.downMask != 0);
++        group->setIntegerValue(kIOHIDEventFieldDigitizerEventMask, combined);
++        if ((active ^ frame.downMask) && notes++ < 24) IOLog("MUNCH TOUCH: contacts %#x -> %#x\n", active, frame.downMask);
++        memcpy(previous, next, sizeof(previous)); active = frame.downMask;
++        dispatchEvent(group);
++    }
++    group->release();
++}
++void MunchDigitizer::tick(OSObject *owner, IOTimerEventSource *source)
++{
++    MunchDigitizer *self = OSDynamicCast(MunchDigitizer, owner);
++    if (!self) return;
++    if (!self->initialized) {
++        self->initialized = true;
++        if (!startSPI(self->bus)) return;
++    }
++    uint8_t bytes[128] = {};
++    FT3658Frame frame = {};
++    if (readSPI(self->bus, 1, 90, bytes) && ft3658Unpack(bytes, 99, frame)) {
++        self->errors = 0; self->consume(frame);
++    } else if (self->bus.unusable || ++self->errors >= 5) {
++        FT3658Frame release = {}; self->consume(release);
++        IOLog("MUNCH TOUCH: invalid reports or FIFO failure; input stopped\n");
++        return;
++    }
++    source->setTimeoutMS(10);
++}
++void MunchDigitizer::stop(IOService *provider)
++{
++    if (timer) { timer->cancelTimeout(); if (work) work->removeEventSource(timer); }
++    FT3658Frame release = {}; consume(release);
++    IOHIDEventService::stop(provider);
++}
++void MunchDigitizer::free(void)
++{
++    OSSafeReleaseNULL(timer);
++    OSSafeReleaseNULL(work);
++    IOHIDEventService::free();
++}
+--- /dev/null
++++ b/iokit/Kernel/arm/hid/MunchTouchPower.cpp
+@@ -0,0 +1,100 @@
++/* Munch-only active RPMh votes for FT3658U supplies, using firmware CMD DB. */
++#include <IOKit/IOLib.h>
++#include <mach/mach_types.h>
++#include <pexpert/pexpert.h>
++#include "MunchPowerFormat.h"
++extern "C" vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++bool munchEnableTouchPower(void);
++static uint32_t powerRead(vm_offset_t base, unsigned offset)
++{
++    uint32_t value = *(volatile uint32_t *)(base + offset);
++    __asm__ volatile("dmb oshld" ::: "memory"); return value;
++}
++static void powerWrite(vm_offset_t base, unsigned offset, uint32_t value)
++{
++    __asm__ volatile("dmb oshst" ::: "memory");
++    *(volatile uint32_t *)(base + offset) = value;
++    __asm__ volatile("dsb osh" ::: "memory");
++}
++static bool powerSet(vm_offset_t base, unsigned offset, uint32_t value)
++{
++    powerWrite(base, offset, value);
++    for (unsigned i = 0; i < 2000; ++i) { if (powerRead(base, offset) == value) return true; IODelay(1); }
++    return false;
++}
++static bool emptySlot(vm_offset_t tcs, unsigned id)
++{
++    unsigned offset = id * 0x2a0;
++    uint32_t status = powerRead(tcs, offset + 0x18);
++    return status != 0xffffffff && (status & 1) &&
++        powerRead(tcs, offset + 0x1c) == 0 && powerRead(tcs, offset + 0x10) == 0 &&
++        !(powerRead(tcs, offset + 0x14) & 0x1010000) &&
++        !(powerRead(tcs, 4) & (1u << id));
++}
++static bool railVote(vm_offset_t tcs, unsigned address, unsigned millivolts)
++{
++    unsigned id = 5;
++    /* Live DT assigns SLEEP slots0..1, ACTIVE2..4, WAKE5..7. */
++    for (unsigned slot = 2; slot <= 4; ++slot) if (emptySlot(tcs, slot)) { id = slot; break; }
++    if (id == 5) { IOLog("MUNCH POWER: no idle ACTIVE slot\n"); return false; }
++    unsigned bit = 1u << id, offset = id * 0x2a0;
++    uint32_t irqEnable = powerRead(tcs, 0);
++    if (irqEnable == 0xffffffff || !powerSet(tcs, 0, irqEnable & ~bit)) return false;
++    if (!emptySlot(tcs, id)) {
++        (void)powerSet(tcs, 0, (powerRead(tcs, 0) & ~bit) | (irqEnable & bit)); return false;
++    }
++    /* After the first payload write, failure quarantines this slot: no retry. */
++    const unsigned reg[] = {0, 8, 4}, value[] = {millivolts, 7, 1};
++    for (unsigned cmd = 0; cmd < 3; ++cmd) {
++        unsigned c = offset + cmd * 0x14;
++        if (!powerSet(tcs, c + 0x30, 0x10108) || !powerSet(tcs, c + 0x34, address + reg[cmd]) ||
++            !powerSet(tcs, c + 0x38, value[cmd])) return false;
++    }
++    if (!powerSet(tcs, offset + 0x10, 7) || !powerSet(tcs, offset + 0x1c, 7) ||
++        !powerSet(tcs, offset + 0x14, 0) || !powerSet(tcs, offset + 0x14, 0x10000)) return false;
++    powerWrite(tcs, offset + 0x14, 0x1010000);
++    bool complete = false;
++    for (unsigned us = 0; us < 20000; ++us) {
++        uint32_t irq = powerRead(tcs, 4), idle = powerRead(tcs, offset + 0x18);
++        complete = irq != 0xffffffff && idle != 0xffffffff && (irq & bit) && (idle & 1);
++        for (unsigned c = 0; c < 3; ++c) {
++            uint32_t status = powerRead(tcs, offset + c * 0x14 + 0x3c);
++            complete &= status != 0xffffffff && (status & 0x10100) == 0x10100;
++        }
++        if (complete) break;
++        IODelay(1);
++    }
++    if (!complete) { IOLog("MUNCH POWER: TCS%u timeout, quarantined\n", id); return false; }
++    if (!powerSet(tcs, offset + 0x14, 0x10000) || !powerSet(tcs, offset + 0x14, 0) ||
++        !powerSet(tcs, offset + 0x1c, 0) || !powerSet(tcs, offset + 0x10, 0)) return false;
++    powerWrite(tcs, 8, bit);
++    if ((powerRead(tcs, 4) & bit) || !powerSet(tcs, 0, (powerRead(tcs, 0) & ~bit) | (irqEnable & bit))) return false;
++    IOLog("MUNCH POWER: %#x %umV active vote complete\n", address, millivolts);
++    return true;
++}
++bool munchEnableTouchPower(void)
++{
++    int enabled = 1;
++    PE_parse_boot_argn("munchtouch_power", &enabled, sizeof(enabled));
++    if (!enabled) return true;
++    vm_offset_t database = ml_io_map(0x80860000, 0x20000);
++    if (!database) return false;
++    /* Immutable reserved CMD DB; copy its bounded image before parsing. */
++    uint8_t *copy = (uint8_t *)IOMalloc(0x20000);
++    if (!copy) return false;
++    for (unsigned i = 0; i < 0x20000; ++i) copy[i] = *(volatile uint8_t *)(database + i);
++    uint32_t l1 = munchFindRail(copy, 0x20000, "ldoc1"), l10 = munchFindRail(copy, 0x20000, "ldoc10");
++    IOFree(copy, 0x20000);
++    if (!l1 || !l10 || l1 == l10) { IOLog("MUNCH POWER: invalid L1C/L10C CMD DB entries\n"); return false; }
++    vm_offset_t rsc = ml_io_map(0x18220000, 0x10000);
++    if (!rsc) return false;
++    unsigned revision = powerRead(rsc, 0), config = powerRead(rsc, 12);
++    unsigned major = (revision >> 16) & 255, count = (config >> 12) & 63, commands = config >> 27;
++    IOLog("MUNCH POWER: RSC rev=%#x config=%#x L1C=%#x L10C=%#x\n", revision, config, l1, l10);
++    if ((major != 1 && major != 2) || config == 0xffffffff || count < 8 || count > 16 || commands < 3 || commands > 16) return false;
++    if (!railVote(rsc + 0xd00, l1, 1800)) return false;
++    IOSleep(1);
++    if (!railVote(rsc + 0xd00, l10, 3000)) return false;
++    IOSleep(1);
++    return true;
++}
+--- /dev/null
++++ b/iokit/Kernel/arm/hid/MunchPowerFormat.h
+@@ -0,0 +1,33 @@
++/* Linux CMD DB v1:144-byte header,8 slave headers,24-byte resource entries. */
++#ifndef MUNCH_POWER_FORMAT_H
++#define MUNCH_POWER_FORMAT_H
++#include <stdint.h>
++#include <stddef.h>
++static inline unsigned munchLE16(const uint8_t *p) { return p[0] | ((unsigned)p[1] << 8); }
++static inline uint32_t munchLE32(const uint8_t *p) { return munchLE16(p) | ((uint32_t)munchLE16(p + 2) << 16); }
++static inline uint32_t munchFindRail(const uint8_t *data, size_t size, const char *name)
++{
++    if (!data || !name || size < 144 || munchLE32(data) != 1 || munchLE32(data + 4) != 0x0c0330db) return 0;
++    uint8_t key[8] = {};
++    unsigned length = 0;
++    while (length < 8 && name[length]) { key[length] = name[length]; ++length; }
++    if (!length || length == 8) return 0;
++    uint32_t found = 0;
++    for (unsigned slave = 0; slave < 8; ++slave) {
++        const uint8_t *h = data + 8 + 16 * slave;
++        unsigned kind = munchLE16(h), offset = 144 + munchLE16(h + 2), count = munchLE16(h + 6);
++        if (!kind) break;
++        if (offset > size || count > (size - offset) / 24) return 0;
++        for (unsigned e = 0; e < count; ++e) {
++            const uint8_t *p = data + offset + e * 24;
++            bool same = true;
++            for (unsigned c = 0; c < 8; ++c) same &= p[c] == key[c];
++            if (!same) continue;
++            unsigned address = munchLE32(p + 16), aux = 144 + munchLE16(h + 4) + munchLE16(p + 22), length = munchLE16(p + 20);
++            if (kind != 4 || (address >> 16) != 4 || (address & 15) || aux > size || length > size - aux || found) return 0;
++            found = address;
++        }
++    }
++    return found;
++}
++#endif
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -67,6 +67,11 @@
+     "     'IOProviderClass' = IOResources;"
+     "     'IOMatchCategory' = IOWatchdog;"
+     "   },"
++    "   {"
++    "     'IOClass' = MunchDigitizer;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = MunchDigitizer;"
++    "   },"
+ #endif
+     "   {"
+     "     'IOClass'         = IOPanicPlatform;"
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -22,3 +22,5 @@
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEventServiceUserClient.cpp optional iokitcpp
++iokit/Kernel/arm/hid/MunchDigitizer.cpp optional iokitcpp
++iokit/Kernel/arm/hid/MunchTouchPower.cpp optional iokitcpp

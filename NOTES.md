@@ -2,6 +2,79 @@
 
 ## Local munch handoff — 2026-10-21
 
+NEW FULL TOUCH0030 PREPARED (2026-10-22):
+User wants a complete touch path in1-2iterations, rather than a separate
+read-only inspection build. New implementation is an IOKit MunchDigitizer
+with its own workloop/timer: direct SPI + coherent whole-frame HID events;
+NO restoration of canceled BSD worker or canceled HID helper patch files.
+0097-munch-hid-service-abi.patch retains portable upstream0058 Apple HID ABI
+sources only, drops Sweet hardware/services, minimal MunchHIDService bridge;
+bridge now retains workloop before allocation-failure exits to match free.
+0098-munch-ft3658u-digitizer.patch adds MunchDigitizer.cpp, FT3658Format.h,
+MunchTouchPower.cpp and MunchPowerFormat.h. IOResources personality starts
+input independently of UFS; own workloop polls10ms, reports changed frames
+only with coherent down/move/up, identities and per-contact edge-tip flags.
+Primary sources: LineageOS/android_kernel_xiaomi_sm8250 at
+6b34d24765327d746074c8e53b5ad0d24a51acc7, focaltech_3658u, spi-geni-qcom,
+qcom-geni-se, gcc-kona,pinctrl-kona,cmd-db,rpmh-rsc,rpmh-regulator + liveFDT.
+Exact99byte SPI read/90byte CRC response; decode62touch bytes, coords/16,
+10contacts, inclusive raw endpoints clamp to1079/2399. Chip ID56:52 only.
+SE4@990000, GPIO8..11 NORTH muxqup4, reset33/IRQ39 SOUTH, XO/4=4.8MHz,
+FIFO streamed across windows with bounded abort/error/overflow handling.
+Missing SPI firmware/unsupported geometry stops with diagnostic, no firmware
+flash. Power path looks up ldoc1/ldoc10 in CMD DB@80860000, validates VRM
+addresses; RSC DRV2@18220000+0xd00, ACTIVE slots2..4 from liveDT. Votes
+L1C1800mV thenL10C3000mV, HPM7,enable last, reset heldlow thenreleased and
+200mssettle. No nonvolatile firmware, direct PMIC, UFS/GPT changes. Busy or
+unknown TCS untouched; uncertain completion leaves ownedslot masked/quarantined,
+no retry. munchtouch=0 disables digitizer; munchtouch_power=0 skips votes.
+Input DT audit verifies resources/supplies/voltages/GPIO/RSC map before packing.
+Preserved upstream panic carve-out conflicted with loader's strict4GiB;
+Munch ADT removes pram/embedded-panic property and restores exact4GiB profile,
+leaving generic Sweet panic feature unchanged. Old0028 kept as checkpoint.
+Host ASAN/UBSAN PASS: frameparser(CRC/gesturetail/10contacts/endpoints/up),
+actual SPI functions(99bytes through4wordFIFO/retries/status/abort/poison/
+overflow), actual RPMh functions(railorder/voltage/idle-slot isolation/
+timeout quarantine/rejected DB/revision/write), actual HID consume(coherent
+IDs/normalization/edge/move/up/dedup/OOM retry). Tests are under/tmp/munch-0030*,
+ASAN detect_leaks=0 due ptrace environment; helpers allocate no persistent data.
+Patches apply independently and staged source comparison PASS. LiveFDT audit,
+Python/shellsyntax and previewpayload loader5prefixes/9malformed/segment/BSS/
+ADT/bootargs PASS using0028kernel; preview is not the0030boot image.
+Stage98, future image shim/out/munch-xnu-0030-touch/testios.img.
+Past failed CI39761079720 did not compile: check-run annotations say hosted
+runner not acquired and macOS ARM capacity constraints. Workflow now uses
+standard macos-15-intel by default, retains ARM choices for manual builds.
+Official runner labels verified from GitHub docs. Need CI compile once;
+user reports completion, do not poll. Then inspect artifact98/symbols, package
+normal0030, loader/header/console checks, deliver temporary boot command.
+No0030artifact/phone result yet. Do not claim hardware touch works from host
+mocks; missing GENI firmware or different runtime geometry remains possible.
+
+
+TOUCH RESET COMPLETED AT USER REQUEST (2026-10-22):
+User canceled the previous touch implementation and explicitly requested
+resetting its commit, then confirmed independent touch bring-up next.
+Remote had rewritten IDs: touchb40ac6d parent9966e06, then merge197efb3
+with upstream067c9b3 (LICENSE and mkadt panic buffer). Backed up only locally
+as backup/munch-before-touch-reset-20261022. Rebuilt merge on9966e06 with
+upstream067c9b3, preserving exactly those two upstream files. Published main
+nowe7bee28aeff037832505ea280569fefc7b98756e; remote197efb3 verified before
+forced ref update, working branch synchronized. No0097/0098 commits remain
+reachable in main history. Stage reverted96/output0028. Touch code and its
+ADT checks are removed from active tree. Existing phone-ready0028-profiled
+image preserved; no phone/root/partition changes. Latest discarded CI
+39761079720 already completed FAILURE; cancel returned409, no running job
+was canceled. Do not use its artifacts. No new CI/polling started.
+Next implement touch independently from primary FT3658U/SM8250 sources and
+phone evidence; do not restore canceled patches. Preserve confirmed iOS
+lock-screen milestone from photo5390970928092617172.jpg (touch absent).
+Generic HID and hardware SPI transport still missing from active96 stage.
+The preserved upstream panic-buffer mkadt change has not been repackaged
+or hardware-tested here; audit RAM-size/loader expectations before future
+image generation. Final reset handoff documentation commit is local only.
+
+
 2026-10-22 XNU0027 PHOTOS / XNU0028 ACL TEST PREPARED:
 Reviewed all20photos Downloads/5390970928092617101..7120.jpg via contacts,
 full-size7114/7116/7119. installcoordinat crash reason namespace18/code2:

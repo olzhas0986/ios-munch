@@ -100,6 +100,13 @@ def build():
     mkadt.SWEET_ECID = 0x4d554e4348000001  # synthetic MUNCH, never a device ID
     mkadt.BOOT_MANIFEST_HASH = hashlib.sha384(b"munch early boot manifest").digest()
     root = mkadt.build()
+    # Keep the verified Munch loader's exact 4GiB aperture. Upstream's new
+    # panic carve-out is not part of this hardware-validated profile yet.
+    root.children = [child for child in root.children if child.name != 'pram']
+    chosen = next(child for child in root.children if child.name == 'chosen')
+    chosen.props = [(n, f, v) for n, f, v in chosen.props if n != 'embedded-panic-log-size']
+    setprop(chosen, 'dram-size', mkadt.u64(SIZE))
+
     # Keep sanitized D22 product identity for Apple userspace.
     for child in root.children:
         if child.name == "sweet-ufs":
@@ -125,12 +132,48 @@ def build():
     return adt.serialize(root)
 
 
+def audit_touch(dtb):
+    def cells(path, prop):
+        return [int(v, 16) for v in subprocess.check_output(['fdtget', '-t', 'x', str(dtb), path, prop]).split()]
+    def string(path, prop):
+        return subprocess.check_output(['fdtget', '-t', 's', str(dtb), path, prop]).decode().strip()
+    touch = '/soc/spi@990000/focaltech@0'
+    pin = cells('/soc/pinctrl@f000000', 'phandle')[0]
+    expected = [
+        ('/soc/spi@990000', 'reg', [0x990000, 0x4000]),
+        ('/soc/pinctrl@f000000', 'reg', [0xf000000, 0x1000000]),
+        (touch, 'reg', [0]), (touch, 'spi-max-frequency', [6000000]),
+        (touch, 'focaltech,reset-gpio', [pin, 33, 0]),
+        (touch, 'focaltech,irq-gpio', [pin, 39, 0x2008]),
+        (touch, 'focaltech,display-coords', [0, 0, 10800, 24000]),
+        (touch, 'focaltech,max-touch-number', [10]),
+        ('/soc/rsc@18200000', 'reg', [0x18200000, 0x10000, 0x18210000, 0x10000, 0x18220000, 0x10000]),
+        ('/soc/rsc@18200000', 'qcom,drv-id', [2]),
+        ('/soc/rsc@18200000', 'qcom,tcs-offset', [0xd00]),
+        ('/soc/rsc@18200000', 'qcom,tcs-config', [2, 2, 0, 3, 1, 3, 3, 1]),
+        ('/reserved-memory/reserved-memory@80860000', 'reg', [0, 0x80860000, 0, 0x20000]),
+    ]
+    for path, prop, wanted in expected:
+        assert cells(path, prop) == wanted, 'unexpected Munch input binding: ' + path + ':' + prop
+    for rail, uv, supply in [(1, 1800000, 'vcc_i2c-supply'), (10, 3000000, 'vdd-supply')]:
+        node = '/soc/rsc@18200000/rpmh-regulator-ldoc' + str(rail)
+        regulator = node + '/regulator-pm8150a-l' + str(rail)
+        assert string(node, 'qcom,resource-name') == 'ldoc' + str(rail)
+        assert string(node, 'qcom,regulator-type') == 'pmic5-ldo'
+        assert cells(regulator, 'regulator-min-microvolt') == [uv]
+        assert cells(regulator, 'qcom,init-voltage') == [uv]
+        assert cells(touch, supply) == cells(regulator, 'phandle')
+    assert string(touch, 'compatible') == 'focaltech,fts'
+    print('Input audit: Munch SE4, GPIO33/39, FT3658U extent, L1C/L10C, RPMh DRV2 ACTIVE2..4')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dtb", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
     audit(args.dtb)
+    audit_touch(args.dtb)
     regs = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), '/soc/ufshc@1d84000', 'reg']).split()
     assert [int(v, 16) for v in regs] == [0x1d84000, 0x3000, 0x1d90000, 0x8000], "unexpected live UFS MMIO"
     data = build()

@@ -16,9 +16,9 @@ kernel=$(realpath "$1")
 live_dtb=$(realpath "$2")
 init_ramdisk=$(realpath "$3")
 cd "$(dirname "$0")/.."
-out=out/munch-xnu-0028
+out=out/munch-xnu-0030-touch
 if [ "$mode" = graphics ]; then out="${out}-graphics"; fi
-if [ "$mode" = profiles ]; then out=out/munch-xnu-0028-profiled; fi
+if [ "$mode" = profiles ]; then out=out/munch-xnu-0030-touch-profiled; fi
 mkdir -p "$out"
 python3 - "$kernel" <<'PY'
 from pathlib import Path
@@ -30,12 +30,12 @@ assert hashlib.sha256(b).hexdigest() == expected, 'kernel checksum mismatch'
 magic, cpu, subtype = struct.unpack_from('<III', b)
 assert magic == 0xfeedfacf and cpu == 0x0100000c and subtype & 0xffffff in (0, 1)
 manifest = json.loads((p.parent / 'munch-patches.json').read_text())
-assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 96
+assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 98
 repo = Path.cwd().parent
 for item in manifest['files']:
-    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96)
+    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98)
     assert hashlib.sha256((repo / 'xnu/patches' / item['name']).read_bytes()).hexdigest() == item['sha256']
-assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96]
+assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98]
 print('Verified bounded iosroot full-root ARM64 CI kernel:', expected)
 PY
 python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"

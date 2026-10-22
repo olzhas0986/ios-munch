@@ -3,6 +3,11 @@
 ## Local munch handoff — 2026-10-21
 
 NEW FULL TOUCH0030 PREPARED (2026-10-22):
+Published sourcebd26fbfc28bc0784ec426d4766b1cb91a1a38b62; local branch
+synchronized to munch/main. Push triggers Intel runner build; no CI polling.
+Next user reports completion: retrieve artifact matching this source, verify
+manifest98/new patch filenames, package0030-touch, run console-layout and
+image/loader checks. No image yet. This final status note is local-only.
 User wants a complete touch path in1-2iterations, rather than a separate
 read-only inspection build. New implementation is an IOKit MunchDigitizer
 with its own workloop/timer: direct SPI + coherent whole-frame HID events;

@@ -133,6 +133,22 @@ def main():
     audit(args.dtb)
     regs = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), '/soc/ufshc@1d84000', 'reg']).split()
     assert [int(v, 16) for v in regs] == [0x1d84000, 0x3000, 0x1d90000, 0x8000], "unexpected live UFS MMIO"
+    # The input driver uses only these audited Munch bindings.
+    touch = '/soc/spi@990000/focaltech@0'
+    for path, prop, expected in [
+        ('/soc/spi@990000', 'reg', [0x990000, 0x4000]),
+        (touch, 'reg', [0]),
+        (touch, 'spi-max-frequency', [6000000]),
+        (touch, 'focaltech,display-coords', [0, 0, 10800, 24000]),
+        (touch, 'focaltech,max-touch-number', [10]),
+    ]:
+        values = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), path, prop]).split()
+        assert [int(v, 16) for v in values] == expected, 'unexpected Munch touch binding: ' + prop
+    controller = int(subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), '/soc/pinctrl@f000000', 'phandle']).strip(), 16)
+    for prop, pin, flags in [('focaltech,reset-gpio', 33, 0), ('focaltech,irq-gpio', 39, 0x2008)]:
+        values = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), touch, prop]).split()
+        assert [int(v, 16) for v in values] == [controller, pin, flags], 'unexpected touch GPIO binding'
+    print('Touch audit: FT3658U SPI SE4, GPIO33/39, ten contacts, 10800x24000')
     data = build()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(data)

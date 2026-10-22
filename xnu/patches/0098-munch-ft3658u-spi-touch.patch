@@ -1,0 +1,319 @@
+--- /dev/null
++++ b/bsd/dev/munch_touch.c
+@@ -0,0 +1,250 @@
++/*
++ * Munch FT3658U over SM8250 GENI SPI SE4. Polled FIFO transport.
++ * Hardware constants audited against live DT and pinned Android drivers.
++ * No DMA, firmware flashing, PMIC/RPMh writes, or borrowed Sweet hardware.
++ * Requires SPI sequencer firmware and touch rails already enabled by firmware.
++ * Missing prerequisites stop the driver with a bounded diagnostic.
++ */
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <kern/sched_prim.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++#include "munch_touch_protocol.h"
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern void thread_terminate_self(void);
++extern void munch_hid_touch(int, int, int, int);
++void munch_touch_init(void);
++static vm_offset_t se, gcc, north, south;
++static unsigned fifo_depth, active_mask;
++static bool dead, started;
++static int sleep_chan;
++#define BIT(n) (1u << (n))
++static uint32_t
++rd(vm_offset_t base, unsigned off)
++{
++    uint32_t value = *(volatile uint32_t *)(base + off);
++    __asm__ volatile("dmb oshld" ::: "memory");
++    return value;
++}
++static void
++wr(vm_offset_t base, unsigned off, uint32_t value)
++{
++    __asm__ volatile("dmb oshst" ::: "memory");
++    *(volatile uint32_t *)(base + off) = value;
++    __asm__ volatile("dsb osh" ::: "memory");
++}
++static bool
++wait_clear(vm_offset_t base, unsigned off, unsigned mask)
++{
++    for (unsigned i = 0; i < 5000; i++) {
++        if (!(rd(base, off) & mask)) { return true; }
++        delay(1);
++    }
++    return false;
++}
++static void
++pause_ms(unsigned ms)
++{
++    uint64_t deadline;
++    clock_interval_to_deadline(ms, NSEC_PER_MSEC, &deadline);
++    (void)assert_wait_deadline(&sleep_chan, THREAD_UNINT, deadline);
++    thread_block(THREAD_CONTINUE_NULL);
++}
++static void
++release_contacts(void)
++{
++    for (unsigned i = 0; i < 10; i++) {
++        if (active_mask & BIT(i)) { munch_hid_touch(i, 0, 0, 0); }
++    }
++    active_mask = 0;
++}
++static bool
++clocks(void)
++{
++    /* QUP0 core/core2x, M/S AHB and SE4 votes, preserving other users. */
++    uint32_t mask = BIT(6) | BIT(7) | BIT(8) | BIT(9) | BIT(14);
++    wr(gcc, 0x52008, rd(gcc, 0x52008) | mask);
++    uint32_t dfs = rd(gcc, 0x174e4), cfg = rd(gcc, 0x174d4);
++    printf("MUNCH TOUCH: GCC vote=%#x cfg=%#x dfs=%#x\n", rd(gcc, 0x52008), cfg, dfs);
++    if (dfs & 1) {
++        cfg = rd(gcc, 0x174ec); /* DFS performance level0 */
++        if ((cfg & 0x371f) != 1) {
++            printf("MUNCH TOUCH: DFS level0 not XO/1 (%#x); stopped\n", cfg);
++            return false;
++        }
++    } else {
++        wr(gcc, 0x174d4, (cfg & ~(0x371fu | BIT(20))) | 1);
++        wr(gcc, 0x174d0, rd(gcc, 0x174d0) | 1);
++        if (!wait_clear(gcc, 0x174d0, 1)) { return false; }
++    }
++    const unsigned branches[] = {0x17004, 0x17008, 0x23000, 0x23008, 0x174cc};
++    for (unsigned i = 0; i < 5; i++) {
++        if (!wait_clear(gcc, branches[i], BIT(31))) {
++            printf("MUNCH TOUCH: clock branch %#x halted\n", branches[i]);
++            return false;
++        }
++    }
++    return true;
++}
++static void
++pin(vm_offset_t tile, unsigned gpio, unsigned mux, unsigned pull, unsigned drive, bool output)
++{
++    unsigned off = gpio * 0x1000;
++    if (output) { wr(tile, off + 4, rd(tile, off + 4) | 2); }
++    uint32_t cfg = rd(tile, off);
++    cfg = (cfg & ~0x3ffu) | (mux << 2) | pull | (drive << 6) | (output ? BIT(9) : 0);
++    wr(tile, off, cfg);
++}
++static void
++abort_transfer(void)
++{
++    /* Only called after this driver issues its own M command. */
++    wr(se, 0x604, 2);
++    bool ack = false;
++    for (unsigned i = 0; i < 5000; i++) {
++        if (rd(se, 0x610) & BIT(5)) { ack = true; break; }
++        delay(1);
++    }
++    dead = !ack || !wait_clear(se, 0x40, 1);
++    for (unsigned i = 0; i < 64 && (rd(se, 0x804) & 0x1ffffff); i++) { (void)rd(se, 0x780); }
++    wr(se, 0x618, 0xffffffff);
++}
++static bool
++transfer(const uint8_t *tx, uint8_t *rx, unsigned size)
++{
++    if (dead || !size || size > 128 || (rd(se, 0x40) & 1)) { return false; }
++    unsigned sent = 0, received = 0;
++    wr(se, 0x618, 0xffffffff);
++    wr(se, 0x26c, size);
++    wr(se, 0x270, size);
++    wr(se, 0x600, 3u << 27); /* full duplex, one transaction / CS assertion */
++    for (unsigned poll = 0; poll < 10000; poll++) {
++        uint32_t status = rd(se, 0x610);
++        if (status & (0x0eu | BIT(9) | BIT(10) | BIT(12) | BIT(13))) { break; }
++        unsigned pending = rd(se, 0x804) & 0x1ffffff;
++        if (pending > 64) { break; }
++        for (unsigned i = 0; i < pending; i++) {
++            uint32_t word = rd(se, 0x780);
++            if (received >= size) { abort_transfer(); return false; }
++            rx[received++] = word & 255; /* one packed byte per FIFO word */
++        }
++        unsigned used = rd(se, 0x800) & 0xfffffff;
++        if (used > fifo_depth) { break; }
++        unsigned room = fifo_depth - used;
++        while (sent < size && room--) { wr(se, 0x700, tx[sent++]); }
++        if ((status & 1) && received == size && sent == size) {
++            wr(se, 0x618, status);
++            delay(150); /* FT3658U CS-high interval */
++            return true;
++        }
++        delay(1);
++    }
++    abort_transfer();
++    return false;
++}
++static bool
++read_register(uint8_t address, uint8_t *data, unsigned size)
++{
++    uint8_t tx[128] = {0}, rx[128] = {0};
++    if (!size || size + 9 > sizeof(tx)) { return false; }
++    tx[0] = address; tx[1] = 0xa0; tx[2] = size >> 8; tx[3] = size;
++    for (unsigned i = 0; i < 3 && !dead; i++) {
++        if (transfer(tx, rx, size + 9) && !(rx[3] & 0xa0)) {
++            uint16_t crc = (uint16_t)rx[7 + size] | ((uint16_t)rx[8 + size] << 8);
++            if (crc == munch_touch_crc(rx + 7, size)) { memcpy(data, rx + 7, size); return true; }
++        }
++        delay(150);
++    }
++    return false;
++}
++static bool
++initialize(void)
++{
++    se = ml_io_map(0x990000, 0x4000);
++    gcc = ml_io_map(0x100000, 0x80000);
++    north = ml_io_map(0xf900000, 0xc000);
++    south = ml_io_map(0xf500000, 0x28000);
++    if (!se || !gcc || !north || !south || !clocks()) { return false; }
++    uint32_t fw = rd(se, 0x68), status = rd(se, 0x40);
++    printf("MUNCH TOUCH: SE4 fw=%#x status=%#x irq39=%u reset33=%u\n", fw, status,
++        rd(south, 39 * 0x1000 + 4) & 1, rd(south, 33 * 0x1000 + 4) & 1);
++    if (((fw >> 8) & 255) != 1 || (status & (BIT(0) | BIT(12)))) {
++        printf("MUNCH TOUCH: SPI firmware missing or engine busy; stopped\n");
++        return false;
++    }
++    uint32_t hw = rd(se, 0xe24);
++    fifo_depth = (hw >> 16) & 63;
++    if (((hw >> 24) & 63) != 32 || fifo_depth < 2 || fifo_depth > 64 || (rd(se, 0x64) & 1)) {
++        printf("MUNCH TOUCH: unsupported FIFO hw=%#x\n", hw); return false;
++    }
++    for (unsigned p = 8; p <= 11; p++) { pin(north, p, 1, 0, 2, false); }
++    /* Keep reset high: no reset pulse, firmware download or power cycling. */
++    pin(south, 33, 0, 3, 3, true);
++    pin(south, 39, 0, 3, 3, false);
++    wr(se, 0x28, rd(se, 0x28) | 0x7f);
++    wr(se, 0xe30, rd(se, 0xe30) | 0xf);
++    wr(se, 0x24, 0x7f); wr(se, 0x20, 1);
++    wr(se, 0x7c, 0); wr(se, 0x48, (4u << 4) | 1); /* XO/4 = 4.8 MHz */
++    wr(se, 0x224, 0); wr(se, 0x22c, 0); wr(se, 0x230, 0);
++    wr(se, 0x24c, 0); wr(se, 0x250, 0); wr(se, 0x25c, 0);
++    wr(se, 0x268, 4); wr(se, 0x278, 0); /* 8-bit, MSB first, SPI mode0 */
++    wr(se, 0x260, 0xff); wr(se, 0x264, 0);
++    wr(se, 0x284, 0xff); wr(se, 0x288, 0); wr(se, 0x254, 0);
++    wr(se, 0x258, 0); wr(se, 0xe18, 0); /* FIFO, no DMA/GSI */
++    wr(se, 0x614, 0); wr(se, 0xe1c, 0); /* polling, no interrupt route */
++    uint8_t hi = 0, lo = 0;
++    if (!read_register(0xa3, &hi, 1) || !read_register(0x9f, &lo, 1) || hi != 0x56 || lo != 0x52) {
++        printf("MUNCH TOUCH: no CRC-valid chip ID; verify L10C/L1C power and firmware\n"); return false;
++    }
++    printf("MUNCH TOUCH: chip=%02x:%02x SPI ready at4.8MHz, FT3658U report format\n", hi, lo);
++    return true;
++}
++static void
++worker(__unused void *arg, __unused wait_result_t wrval)
++{
++    pause_ms(1000);
++    if (initialize()) {
++        unsigned errors = 0;
++        while (!dead) {
++            uint8_t report[63], payload[90]; struct munch_contact contacts[10];
++            report[0] = 1;
++            int count = -1;
++            /* Linux requests 62 touch + 28 gesture bytes; CRC covers all90. */
++            if (read_register(1, payload, sizeof(payload))) {
++                memcpy(report + 1, payload, 62);
++                count = munch_touch_decode(report, sizeof(report), contacts);
++            }
++            if (count >= 0) {
++                unsigned mask = 0;
++                for (int i = 0; i < count; i++) {
++                    struct munch_contact c = contacts[i];
++                    munch_hid_touch(c.id, c.down, c.x, c.y);
++                    if (c.down) { mask |= BIT(c.id); }
++                }
++                for (unsigned i = 0; i < 10; i++) {
++                    if ((active_mask & ~mask) & BIT(i)) { munch_hid_touch(i, 0, 0, 0); }
++                }
++                active_mask = mask; errors = 0;
++            } else if (++errors >= 5) {
++                printf("MUNCH TOUCH: five invalid reports; release contacts and stop\n");
++                break;
++            }
++            pause_ms(10);
++        }
++    }
++    release_contacts();
++    thread_terminate_self();
++}
++void
++munch_touch_init(void)
++{
++    int enabled = 1;
++    PE_parse_boot_argn("munchtouch", &enabled, sizeof(enabled));
++    if (!enabled || started) { return; }
++    started = true;
++    thread_t thread;
++    if (kernel_thread_start(worker, NULL, &thread) == KERN_SUCCESS) { thread_deallocate(thread); }
++}
+--- /dev/null
++++ b/bsd/dev/munch_touch_protocol.h
+@@ -0,0 +1,42 @@
++/* FT3658U report format from the Munch Android driver; no hardware access. */
++#ifndef MUNCH_TOUCH_PROTOCOL_H
++#define MUNCH_TOUCH_PROTOCOL_H
++#include <stdint.h>
++#include <stdbool.h>
++#define MUNCH_TOUCH_COUNT 10
++#define MUNCH_TOUCH_REPORT 63
++struct munch_contact { unsigned id, x, y; bool down; };
++static uint16_t
++munch_touch_crc(const uint8_t *data, unsigned size)
++{
++    uint16_t crc = 0xffff;
++    for (unsigned i = 0; i < size; i++) {
++        crc ^= data[i];
++        for (unsigned b = 0; b < 8; b++) {
++            crc = (crc >> 1) ^ ((crc & 1) ? 0x8408 : 0);
++        }
++    }
++    return crc;
++}
++/* Validate the complete report before the caller changes any contact state. */
++static int
++munch_touch_decode(const uint8_t *buf, unsigned size, struct munch_contact contacts[10])
++{
++    if (!buf || !contacts || size != MUNCH_TOUCH_REPORT || (buf[2] & 15) > 10) { return -1; }
++    unsigned count = 0, seen = 0, active = 0;
++    for (unsigned i = 0; i < 10; i++) {
++        unsigned b = i * 6, id = buf[b + 5] >> 4, flag = buf[b + 3] >> 6;
++        if (id == 15) { break; }
++        if (id >= 10 || (seen & (1u << id)) || flag == 3) { return -1; }
++        unsigned x = ((buf[b + 3] & 15) << 12) | (buf[b + 4] << 4) | (buf[b + 7] >> 4);
++        unsigned y = ((buf[b + 5] & 15) << 12) | (buf[b + 6] << 4) | (buf[b + 7] & 15);
++        bool down = flag != 1;
++        if (down && (x >= 1080 * 16 || y >= 2400 * 16)) { return -1; }
++        if (down) { active++; }
++        contacts[count++] = (struct munch_contact){id, x / 16, y / 16, down};
++        seen |= 1u << id;
++    }
++    if (active != (buf[2] & 15)) { return -1; }
++    return (int)count;
++}
++#endif
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -106,6 +106,7 @@
+ bsd/dev/memdev.c			standard
+ bsd/dev/munch_ufs.c			standard
+ bsd/dev/munch_sample.c			standard
++bsd/dev/munch_touch.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+--- a/bsd/dev/munch_ufs.c
++++ b/bsd/dev/munch_ufs.c
+@@ -639,6 +639,8 @@
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20, su.writable ? "read-write" : "read-only", su.dma_pa);
+ 	extern void munch_sample_start(void);
+ 	munch_sample_start();
++	extern void munch_touch_init(void);
++	munch_touch_init();
+ 	return 0;
+ }
+ 

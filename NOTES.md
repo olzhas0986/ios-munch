@@ -2,7 +2,84 @@
 
 ## Local munch handoff — 2026-10-21
 
+MUNCH TOUCH0029 IMPLEMENTED / BUILD PENDING (2026-10-22):
+User authorized touch, then requested checking danya2271/ios-munch and
+interrupted/resumed. Local fork research/munch/danya-ios-munch HEAD68d2ede.
+Fork has useful0085 pure FT3658U parser + protocol audit, NOT a working
+SPI touch transport; its README explicitly disclaims Munch reproduction.
+Confirmed its99-byte transaction correction in actual LineageOS Android
+source6b34d24765327d746074c8e53b5ad0d24a51acc7: focaltech_3658u pnt_buf_size
+63+28, read minus1 =>90bytes, header4+dummy3+CRC2 =>99. Our initial62-byte
+candidate corrected BEFORE publication. Reference files under ignored
+research/munch/touch-reference; sparse Android clone android-kernel-touch.
+0097 independently imports portable0058 HID sources, MunchHID names/events,
+no Sweet hardware. Edge flag from0071 adapted for1080x2400 native coords.
+0098 Munch FT3658U SPI FIFO worker: SE4@990000, GCC source174d0/vote52008
+bits6..9/14, NORTH GPIO8..11 mux1, SOUTH GPIO33reset high/39IRQinput,
+TLMMbasef000000 with NORTH900000/SOUTH500000 from pinctrl-kona.c.
+Verified chip ID56:52, mode0, XO/4=4.8MHz, no DMA/IRQ routing/firmware flash/
+PMIC/RPMh writes/reset pulse. Requires ABL-inherited powered rails L10C/L1C
+and protocol1 SPI GENI firmware; stops if absent/busy/unknown FIFO/clock.
+Read-only chip commands a3/9f/01; three retries, CRCffff/8408 LE all90bytes;
+FT3658U16x coords ->pixels/16; ten slots. Five malformed reports release all
+contacts and terminate. SPI transfer/abort/FIFO loops bounded. munchtouch=0
+disables. Hook UFS init after sampler; current physicalroot reaches it.
+Hardware prerequisites unverified; first phone test may expose missing
+firmware/power rather than provide touch. Do not claim touch works yet.
+Stage98, outputs0029/default,0029-profiled,0029-graphics. mkmunchadt now
+validates SPI binding, maxfrequency, contactextent and GPIOcontroller/pins/
+flags against liveDT before image creation. Existing0028 preserved.
+Host ASAN/UBSAN decoder (CRC/coords/10contacts/up/invalid frames) and actual
+read_register extraction (99bytecommand/all90CRC/status/retry/bounds) PASS.
+LeakSanitizer unsupported under sandbox ptrace; reran detect_leaks=0, no
+allocation in these helpers. Independent final patch application PASS;
+Python/shell syntax and liveDT binding audit PASS. CI compile pending.
+Need publish/CI once, user reports completion; do not poll. If successful,
+inspect compiled HID/touch symbols, manifest98, pack0029normal and verify
+loader/header/payload as before. First phone capture MUNCH HID/MUNCH TOUCH.
+
+
+MUNCH GUI MILESTONE / TOUCH NEXT (2026-10-22):
+Photo Downloads/5390970928092617172.jpg from0028-profiled shows actual iOS
+lock screen: Wednesday December31,4:06, camera button/home indicator, red
+rdar45025538 banner. User reports nothing responds to touch. This is the
+first confirmed Munch lock-screen GUI after0096 local ACL group resolution;
+not full functional iOS. Remaining profiled AKS31 unsupported log does not
+prevent this GUI. No need fake crypto success to remove that note.
+Stage96 excludes0058 HID event services and0060 Sweet touch driver; Munch
+has no digitizer/input path connected. Thus lack of touch is expected, not
+proof SpringBoard hung. Next implement/adapt generic HID event services and
+Munch FocalTech SPI SE4@0x990000 IRQ39 reset33 driver using stock/live FDT
+and actual Android driver. Do NOT import Sweet Goodix protocol, GPIO/MMIO
+or touch power rails. Preserve working0028 as checkpoint; no touch patch
+or new build launched yet. User result says touch absent; buttons untested.
+Time/date incorrect (RTC not initialized); display color accuracy unverified.
+
+
+XNU0028 READY FOR PHONE (2026-10-22):
+CI39751086547 SUCCESS, source4120bc5306ed653e729e8c68079ec51de0b04e3f,
+artifact12413602552. Kernel xnu-run-39751086547/kernel.development.sweet SHA256
+ff8effae9495735c448dbb49304852ee45df59e2901309b5b02cc21907a4ea4a.
+Image shim/out/munch-xnu-0028-profiled/testios.img,125612032bytes,SHA256
+24ccd361d78b86f8b697e45feac8df0c86b6d0febd6db4f71011d91a616de481.
+Manifest96/source hashes/kernel checksum ARM64/liveFDT/bootheader/exactpayload/
+rootargs/ADT RAMDisk map/loader5prefixes9malformed PASS. Compiled resolver
+submit/identitysvc_has_registered symbols present0026 absent0028 PASS.
+A third attempted updatecache symbol check was discarded: function is not
+present as an independent symbol in the baseline (inlining); no image fault.
+Console protection and no unsafe framebuffer console switch PASS.
+Use --profiles output for comparable SpringBoard/profiled snapshots. Phone
+boot2-3minutes, photograph GUI or EACCES/crash/SMP lines. No phone result yet,
+no root reinstall; Android/GPT untouched. No CI polling, fetched only after
+user notification. This supersedes older pending status below.
+
+
 2026-10-22 XNU0027 PHOTOS / XNU0028 ACL TEST PREPARED:
+Published source4120bc5306ed653e729e8c68079ec51de0b04e3f, local branch synced.
+Workflow push paths trigger kernel CI; no status polling per user request.
+Patch application, Python and shell syntax PASS. Next user reports build
+completion; retrieve matching run/artifact, package0028 normal (or profiled
+if useful), verify manifest96+image, then temporary boot. No0028 image yet.
 Reviewed all20photos Downloads/5390970928092617101..7120.jpg via contacts,
 full-size7114/7116/7119. installcoordinat crash reason namespace18/code2:
 Failed to create data directory, NSPOSIXErrorDomain Code=13 (EACCES), line171.

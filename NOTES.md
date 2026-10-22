@@ -2,6 +2,54 @@
 
 ## Local munch handoff — 2026-10-21
 
+2026-10-22 XNU0022 PHONE PHOTOS REVIEWED:
+13 photos5391209827058522788..2801 (no2792) show Sandbox operations now
+reaching MUNCH policy and no repeated error159 denial flood. backboardd
+loads ObjC/AKS; MobileGestaltHelper reaches FB selectors8/28. No MUNCH CRASH
+or panic is visible in supplied frames. User says messages kept scrolling,
+then manually rebooted; do NOT call this a confirmed hang or kernel crash.
+Concrete new failure photo2790: usermanagerd cannot atomically save
+/private/var/keybags/persona.kb, "Failed to atomically swap writing file:
+Operation not supported (45)". Existing upstream0052 handles HFS's missing
+RENAME_SWAP via VNOP_EXCHANGE for regular files. Independent0090 adapts it
+and additionally restricts fallback to same mounted ROOT filesystem, only
+on ENOTSUP and flags exactly VFS_RENAME_SWAP; no other rename errors hidden.
+Independent0091 limits successful iOS-spawn notes4 per path, DYLD unnest
+console notes4 total, successful AKS notes8 total. AKS errors and MUNCH CRASH
+remain enabled; no spawn/VM/AKS state logic changed. Observed unsupported
+AKS selector103 is preserved as a diagnostic, not claimed fixed.
+Stage last91/allowlist adds90/91; output munch-xnu-0023/testios.img. Both new
+patches apply to exactCI0021 baseline files, unchanged by0088/0089. Need CI,
+validate image/loader and give user temporary boot instructions. Root0020
+remains installed; no root reinstall/Android/GPT changes are needed.
+
+XNU0022 READY FOR PHONE (2026-10-22): CI39720224922 SUCCESS.
+Published source c7b4d7b06e103e662ff7bf53c79c36dad8784352; artifact12400564536.
+Kernel research/munch/xnu-run-39720224922/kernel.development.sweet SHA256
+e5c46fb2a012a67960aadd4222332e7c81d386b083faa0ba94d33b2b1eb47fca.
+Boot shim/out/munch-xnu-0022/testios.img,125628416bytes, SHA256
+59aef7271925d66b65d4edfdd5ff4097590fd8d384597da34c8d5de6de164147.
+CI build/ARM64/checksum/allowlist89 PASS. New Sandbox policy, MUNCH CRASH
+and munchnull strings VERIFIED in compiled kernel, not only patch source.
+LiveFDT/RAM/UFS audit, exact embedded payload/v3 header, physical-root args
+and host-loader5prefixes/9malformed cases/fullsegments/BSS/ADT checks PASS.
+Sandbox operation contracts and independent3-per-process crash limits PASS.
+Next: temporary fastboot boot0022/testios.img with existing installed root0020,
+photograph new output, especially MUNCH CRASH/reason/backboardd stderr.
+No0022 hardware result yet; Sandbox fix does not prove GUI dependencies work.
+No root reinstall, GPT/Android changes or additional phone-side actions needed.
+Final docs/handoff commit is local; CI source already published on GitHub.
+
+XNU0022 CI RUNNING:39720224922, published source
+c7b4d7b06e103e662ff7bf53c79c36dad8784352. Local branch synchronized.
+Sandbox operation contract and exact first3-per-process crash gate checks
+PASS; patch application to exact0021 source PASS. Need CI artifact, kernel
+SHA/manifest/new diagnostic marker checks, build0022 with ../live.dtb and
+shim/out/munch-init-0017/root.hfs, then run loader host harness/new boot header
+and embedded-payload checks. docs/MUNCH_XNU_0022.md prepared. Record hashes
+and final hardware instructions after successful packaging. No0022 phone
+result yet. Installed root0020 should be reused without another installation.
+
 2026-10-22 XNU0021 PHONE PHOTOS / SANDBOX FAILURE:
 Six Windows Downloads photos5391209827058522778..2783 reviewed. launchd
 starts SpringBoard/backboardd and many Apple daemons from installed root0020.

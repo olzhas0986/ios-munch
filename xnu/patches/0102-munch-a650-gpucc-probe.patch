@@ -6,7 +6,6 @@
  
 +/* A650/Kona stage 2: opt-in GPUCC register survey. No register writes. */
 +extern "C" vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
-+extern "C" void munch_usb_probe(void);
 +static void
 +munch_a650_gpucc_probe(void)
 +{
@@ -41,7 +40,6 @@
 +	IOLog("MUNCH A650: framebuffer ready, entering probe\n");
 +	munch_a650_gpucc_probe();
 +	IOLog("MUNCH A650: probe returned\n");
-+	munch_usb_probe();
  	fLock = IOLockAlloc();
  	fClients = OSArray::withCapacity(4);
  	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);

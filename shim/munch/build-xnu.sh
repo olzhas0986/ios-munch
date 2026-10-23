@@ -32,12 +32,12 @@ assert hashlib.sha256(b).hexdigest() == expected, 'kernel checksum mismatch'
 magic, cpu, subtype = struct.unpack_from('<III', b)
 assert magic == 0xfeedfacf and cpu == 0x0100000c and subtype & 0xffffff in (0, 1)
 manifest = json.loads((p.parent / 'munch-patches.json').read_text())
-assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 104
+assert manifest['stage'] == 'munch-full-root' and manifest['last_patch'] == 102
 repo = Path.cwd().parent
 for item in manifest['files']:
-    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104)
+    assert int(item['name'][:4]) in (*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102)
     assert hashlib.sha256((repo / 'xnu/patches' / item['name']).read_bytes()).hexdigest() == item['sha256']
-assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104]
+assert sorted(int(i['name'][:4]) for i in manifest['files'] if i['name'].endswith('.patch')) == [*range(1, 28), 32, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102]
 print('Verified bounded iosroot full-root ARM64 CI kernel:', expected)
 PY
 if [ "$mode" = smp8 ]; then
@@ -45,7 +45,7 @@ if [ "$mode" = smp8 ]; then
 else
     python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
 fi
-cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1 muncha650probe=1 munchusbprobe=1 munchusbgadget=2'
+cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1 muncha650probe=1'
 if [ "$mode" = graphics ]; then cmdline+=' sweetfb_noconsole=1'; fi
 if [ "$mode" = smp8 ]; then cmdline="${cmdline/cpus=1/cpus=8}"; fi
 if [ "$mode" = profiles ]; then

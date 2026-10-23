@@ -1,30 +1,63 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -275,5 +275,5 @@
+@@ -264,30 +264,37 @@
+ 			w = (int32_t)s->width;
+ 			h = (int32_t)s->height;
  		}
 -		if (sx < 0 || sy < 0) {
 -			sx = sy = 0;
 -		}
-+		/* Keep source/destination rectangles aligned when clipping. */
-+		if (sx < 0) { w += sx; dx -= sx; sx = 0; }
-+		if (sy < 0) { h += sy; dy -= sy; sy = 0; }
- 		/* UI space -> centered physical panel space (crop, never scale). */
-@@ -303,7 +303,14 @@
- 		}
+-		if (dx < 0 || dy < 0) {
+-			dx = dy = 0;
+-		}
+-		if (w > (int32_t)s->width - sx) {
+-			w = (int32_t)s->width - sx;
+-		}
+-		if (h > (int32_t)s->height - sy) {
+-			h = (int32_t)s->height - sy;
+-		}
+-		if (w > (int32_t)fWidth - dx) {
+-			w = (int32_t)fWidth - dx;
+-		}
+-		if (h > (int32_t)fHeight - dy) {
+-			h = (int32_t)fHeight - dy;
+-		}
 -		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow +
 -		    (uint64_t)(sx + w) * 4;
 -		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
 -		    s->memory == NULL || last > s->memory->getLength()) {
-+		/* Reject zero/negative rectangles before calculating the last row. */
-+		if (w <= 0 || h <= 0 || sx < 0 || sy < 0 || dx < 0 || dy < 0 ||
-+		    s->elementWidth != 1 || s->elementHeight != 1 ||
++		/* Clip source and destination together, using signed 64-bit math. */
++		int64_t srcx = sx, srcy = sy, dstx = dx, dsty = dy;
++		int64_t cw = w, ch = h;
++		if (srcx < 0) { cw += srcx; dstx -= srcx; srcx = 0; }
++		if (srcy < 0) { ch += srcy; dsty -= srcy; srcy = 0; }
++		if (dstx < 0) { cw += dstx; srcx -= dstx; dstx = 0; }
++		if (dsty < 0) { ch += dsty; srcy -= dsty; dsty = 0; }
++		if (srcx >= s->width || srcy >= s->height ||
++		    dstx >= fWidth || dsty >= fHeight) {
++			cw = ch = 0;
++		} else {
++			if (cw > (int64_t)s->width - srcx) cw = (int64_t)s->width - srcx;
++			if (ch > (int64_t)s->height - srcy) ch = (int64_t)s->height - srcy;
++			if (cw > (int64_t)fWidth - dstx) cw = (int64_t)fWidth - dstx;
++			if (ch > (int64_t)fHeight - dsty) ch = (int64_t)fHeight - dsty;
++		}
++		if (cw <= 0 || ch <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
 +		    s->memory == NULL || bpe != 4 ||
-+		    (uint64_t)(sx + (int64_t)w) * 4 > s->bytesPerRow ||
-+		    (uint64_t)(dx + (int64_t)w) * 4 > fRowBytes) {
++		    (uint64_t)(srcx + cw) * 4 > s->bytesPerRow ||
++		    (uint64_t)(dstx + cw) * 4 > fRowBytes) {
  			src = 0;
+-		}
 +		} else {
 +			uint64_t last = (uint64_t)s->offset +
-+			    (uint64_t)(sy + (int64_t)h - 1) * s->bytesPerRow +
-+			    (uint64_t)(sx + (int64_t)w) * 4;
++			    (uint64_t)(srcy + ch - 1) * s->bytesPerRow +
++			    (uint64_t)(srcx + cw) * 4;
 +			if (last > s->memory->getLength()) src = 0;
- 		}
++		}
++		/* Safe casts after clipping to visible bounds. */
++		sx = (int32_t)srcx; sy = (int32_t)srcy;
++		dx = (int32_t)dstx; dy = (int32_t)dsty;
++		w = (int32_t)cw; h = (int32_t)ch;
+ 		if (src != 0 && bpe == 4) {
+ 			for (int32_t y = 0; y < h; y++) {
+ 				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),

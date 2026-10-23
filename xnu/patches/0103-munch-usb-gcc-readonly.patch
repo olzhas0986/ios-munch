@@ -8,17 +8,6 @@
  bsd/dev/mem.c				standard
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
---- a/bsd/dev/munch_ufs.c
-+++ b/bsd/dev/munch_ufs.c
-@@ -639,6 +639,8 @@
- 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20, su.writable ? "read-write" : "read-only", su.dma_pa);
- 	extern void munch_sample_start(void);
- 	munch_sample_start();
-+	extern void munch_usb_probe(void);
-+	munch_usb_probe();
- 	return 0;
- }
- 
 --- /dev/null
 +++ b/bsd/dev/munch_usb_probe.c
 @@ -0,0 +1,43 @@

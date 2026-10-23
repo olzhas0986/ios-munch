@@ -7,7 +7,7 @@ on:
         description: macOS build host (Intel avoids ARM runner capacity constraints)
         type: choice
         options: [macos-15-intel, macos-15, macos-14]
-        default: macos-15-intel
+        default: macos-15
   push:
     branches: [main, munch-bringup]
     paths:

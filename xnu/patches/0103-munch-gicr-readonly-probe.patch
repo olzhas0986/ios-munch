@@ -1,0 +1,46 @@
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -48,6 +48,35 @@
+     return (int32_t)x0;
+ }
+ 
++/* Read-only GICv3 redistributor affinity survey. No GICR writes. */
++extern "C" vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++static void
++munch_gicr_affinity_probe(void)
++{
++    int enabled = 0;
++    PE_parse_boot_argn("munchgicrprobe", &enabled, sizeof(enabled));
++    if (enabled != 1) return;
++
++    const vm_offset_t base = ml_io_map((vm_offset_t)0x17a60000ULL, (vm_size_t)0x100000);
++    if (!base) {
++        IOLog("MUNCH GICR: mapping failed\n");
++        return;
++    }
++    IOLog("MUNCH GICR: read-only affinity scan start\n");
++    for (unsigned i = 0; i < 8; ++i) {
++        const vm_offset_t frame = base + (vm_offset_t)i * 0x20000;
++        const volatile uint32_t *typer = (const volatile uint32_t *)(frame + 0x8);
++        const uint32_t low = typer[0];
++        const uint32_t high = typer[1];
++        __asm__ volatile("dmb oshld" ::: "memory");
++        /* GICR_TYPER[63:32] is affinity value, [4] is Last. */
++        IOLog("MUNCH GICR: frame=%u phys=0x%llx typer=%08x:%08x affinity=0x%08x last=%u\n",
++            i, (unsigned long long)(0x17a60000ULL + (unsigned long long)i * 0x20000ULL),
++            high, low, high, (low >> 4) & 1);
++    }
++    IOLog("MUNCH GICR: read-only affinity scan end\n");
++}
++
+ OSDefineMetaClassAndStructors(SweetCPU, IOCPU);
+ 
+ bool
+@@ -119,6 +148,7 @@
+ 	ml_set_max_cpus(topology->max_cpu_id + 1);
+ 	IOLog("MUNCH CPU: boot CPU %u registered, SGI1 verified, initialization complete\n",
+ 	    getCPUNumber());
++	munch_gicr_affinity_probe();
+ 	return true;
+ }
+ 

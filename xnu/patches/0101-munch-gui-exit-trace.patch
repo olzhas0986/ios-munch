@@ -1,0 +1,22 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2162,10 +2162,19 @@
+ 	}
+ 
+ 	proc_unlock(p);
+ 	pid = proc_getpid(p);
+ 	exitval = p->p_xstat;
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	/* Track termination of GUI daemons even if they never generate a corpse.
++	 * Avoid expensive stack walking or output for unrelated processes. */
++	if (!strcmp(p->p_comm, "SpringBoard") ||
++	    !strcmp(p->p_comm, "backboardd")) {
++		printf("MUNCH EXIT: %s pid=%d rawstatus=0x%x signal=%d code=%d\n",
++		    p->p_comm, pid, exitval, WTERMSIG(exitval), WEXITSTATUS(exitval));
++	}
++#endif
+ 	KERNEL_DEBUG_CONSTANT_IST(KDEBUG_COMMON,
+ 	    BSDDBG_CODE(DBG_BSD_PROC, BSD_PROC_EXIT) | DBG_FUNC_START,
+ 	    pid, exitval, 0, 0, 0);
+ 
+ #if DEVELOPMENT || DEBUG

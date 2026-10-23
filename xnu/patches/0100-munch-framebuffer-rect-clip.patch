@@ -1,0 +1,30 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -275,5 +275,5 @@
+ 		}
+-		if (sx < 0 || sy < 0) {
+-			sx = sy = 0;
+-		}
++		/* Keep source/destination rectangles aligned when clipping. */
++		if (sx < 0) { w += sx; dx -= sx; sx = 0; }
++		if (sy < 0) { h += sy; dy -= sy; sy = 0; }
+ 		/* UI space -> centered physical panel space (crop, never scale). */
+@@ -303,7 +303,14 @@
+ 		}
+-		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow +
+-		    (uint64_t)(sx + w) * 4;
+-		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
+-		    s->memory == NULL || last > s->memory->getLength()) {
++		/* Reject zero/negative rectangles before calculating the last row. */
++		if (w <= 0 || h <= 0 || sx < 0 || sy < 0 || dx < 0 || dy < 0 ||
++		    s->elementWidth != 1 || s->elementHeight != 1 ||
++		    s->memory == NULL || bpe != 4 ||
++		    (uint64_t)(sx + (int64_t)w) * 4 > s->bytesPerRow ||
++		    (uint64_t)(dx + (int64_t)w) * 4 > fRowBytes) {
+ 			src = 0;
++		} else {
++			uint64_t last = (uint64_t)s->offset +
++			    (uint64_t)(sy + (int64_t)h - 1) * s->bytesPerRow +
++			    (uint64_t)(sx + (int64_t)w) * 4;
++			if (last > s->memory->getLength()) src = 0;
+ 		}

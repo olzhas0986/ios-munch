@@ -818,9 +818,9 @@
 +
 +	/* Endpoint 0 OUT/IN: start config, control type, max packet 512 until connect done. */
 +	if (ud_epcmd(0, DEPCMD_DEPSTARTCFG, 0, 0, 0) ||
-+	    ud_epcmd(0, DEPCMD_SETEPCONFIG, (0u << 1) | (512u << 3), (1u << 8) | (1u << 10) | (0u << 25), 0) ||
++	    ud_epcmd(0, DEPCMD_SETEPCONFIG, (0u << 1) | (64u << 3), (1u << 8) | (1u << 10) | (0u << 25), 0) ||
 +	    ud_epcmd(0, DEPCMD_SETTRANSFRESOURCE, 1, 0, 0) ||
-+	    ud_epcmd(1, DEPCMD_SETEPCONFIG, (0u << 1) | (512u << 3), (1u << 8) | (1u << 10) | (1u << 25), 0) ||
++	    ud_epcmd(1, DEPCMD_SETEPCONFIG, (0u << 1) | (64u << 3), (1u << 8) | (1u << 10) | (1u << 25), 0) ||
 +	    ud_epcmd(1, DEPCMD_SETTRANSFRESOURCE, 1, 0, 0)) {
 +		printf("SWEET USB: endpoint 0 setup failed\n");
 +		return;

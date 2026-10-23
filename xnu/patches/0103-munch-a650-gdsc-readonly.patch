@@ -1,0 +1,25 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -57,7 +57,7 @@
+         return;
+     }
+     /* The GPU itself and GMU may be power-gated. Never read them here. */
+-    const vm_offset_t gpucc = ml_io_map((vm_offset_t)0x03d90000ULL, (vm_size_t)0x1000);
++    const vm_offset_t gpucc = ml_io_map((vm_offset_t)0x03d90000ULL, (vm_size_t)0x2000);
+     if (!gpucc) {
+         IOLog("MUNCH A650: GPUCC mapping failed at 0x03d90000\n");
+         return;
+@@ -68,6 +68,13 @@
+     __asm__ volatile("dmb oshld" ::: "memory");
+     IOLog("MUNCH A650: GPUCC raw offset 0x000=0x%08x 0x004=0x%08x (no writes)\n",
+         raw0, raw4);
++    /* SM8250 gpucc-sm8250.c: read GDSCRs only, never touch gated GPU/GMU. */
++    const uint32_t cx = *(volatile const uint32_t *)(gpucc + 0x106c);
++    const uint32_t gx = *(volatile const uint32_t *)(gpucc + 0x100c);
++    __asm__ volatile("dmb oshld" ::: "memory");
++    IOLog("MUNCH A650: GPUCC CX_GDSCR[106c]=0x%08x GX_GDSCR[100c]=0x%08x\n", cx, gx);
++    IOLog("MUNCH A650: CX pwr_on=%u GX pwr_on=%u (bit31; snapshot only)\n",
++        (cx >> 31) & 1u, (gx >> 31) & 1u);
+     IOLog("MUNCH A650: KGSL 0x03d00000 GMU 0x03d6a000 NOT ACCESSED; powered state unknown\n");
+ }
+ 

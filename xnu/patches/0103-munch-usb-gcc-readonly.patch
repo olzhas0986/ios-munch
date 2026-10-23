@@ -1,0 +1,64 @@
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -106,6 +106,7 @@
+ bsd/dev/memdev.c			standard
+ bsd/dev/munch_ufs.c			standard
+ bsd/dev/munch_sample.c			standard
++bsd/dev/munch_usb_probe.c		standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+--- a/bsd/dev/munch_ufs.c
++++ b/bsd/dev/munch_ufs.c
+@@ -639,6 +639,8 @@
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20, su.writable ? "read-write" : "read-only", su.dma_pa);
+ 	extern void munch_sample_start(void);
+ 	munch_sample_start();
++	extern void munch_usb_probe(void);
++	munch_usb_probe();
+ 	return 0;
+ }
+ 
+--- /dev/null
++++ b/bsd/dev/munch_usb_probe.c
+@@ -0,0 +1,40 @@
++/* SM8250 Munch USB GCC status. No DWC3/PHY MMIO, no register writes. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++static uint32_t
++munch_usb_rd(vm_offset_t base, uint32_t off)
++{
++    uint32_t value = *(volatile const uint32_t *)(base + off);
++    __asm__ volatile("dmb oshld" ::: "memory");
++    return value;
++}
++
++void
++munch_usb_probe(void)
++{
++    int enable = 0;
++    if (!PE_parse_boot_argn("munchusbprobe", &enable, sizeof(enable)) || enable != 1) {
++        return;
++    }
++    printf("MUNCH USB: probe entered, GCC only (no USB enumeration)\n");
++    /* GCC_SM8250 USB30_PRIM status offsets: no access to gated DWC3. */
++    vm_offset_t gcc = ml_io_map((vm_offset_t)0x00100000ULL, (vm_size_t)0x11000);
++    if (gcc == 0) {
++        printf("MUNCH USB: GCC mapping failed\n");
++        return;
++    }
++    uint32_t gdsc = munch_usb_rd(gcc, 0xf004);
++    uint32_t master = munch_usb_rd(gcc, 0xf010);
++    uint32_t sleep = munch_usb_rd(gcc, 0xf018);
++    uint32_t utmi = munch_usb_rd(gcc, 0xf01c);
++    printf("MUNCH USB: GDSCR=%08x MASTER=%08x SLEEP=%08x UTMI=%08x\n",
++        gdsc, master, sleep, utmi);
++    printf("MUNCH USB: master_clk_off=%u sleep_clk_off=%u utmi_clk_off=%u\n",
++        (master >> 31) & 1, (sleep >> 31) & 1, (utmi >> 31) & 1);
++    printf("MUNCH USB: DWC3 0x0a600000 NOT accessed; USB CDC-ECM NOT started\n");
++}
++#endif

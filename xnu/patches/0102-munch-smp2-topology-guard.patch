@@ -1,0 +1,23 @@
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -63,8 +63,19 @@
+ 	    *(const uint32_t *)reg->getBytesNoCopy() != cpu->phys_id) {
+ 		return false;
+ 	}
++	/* Stage 0102: diagnose SMP2 topology without allowing a half-initialized
++	 * second CPU to enter the scheduler. Boot CPU must be MPIDR 0; CPU1 is
++	 * MPIDR 0x100 (Aff1=1, Aff0=0) on munch. */
++	if (topology->num_cpus == 2) {
++		const ml_topology_cpu_t *second = &topology->cpus[1];
++		if (cpu->cpu_id != 0 || cpu->phys_id != 0 ||
++		    second->cpu_id != 1 || second->phys_id != 0x100) {
++			panic("MUNCH SMP2: ADT CPU topology mismatch");
++		}
++		IOLog("MUNCH SMP2: CPU0/CPU1 ADT validated; secondary IOCPU/GIC startup NOT READY\n");
++	}
+ 	if (topology->num_cpus != 1) {
+-		panic("MUNCH CPU: only single-CPU bring-up is supported");
++		panic("MUNCH SMP2: refusing boot without CPU1 GIC and IOCPU startup");
+ 	}
+ 	if (!IOCPU::start(provider)) {
+ 		return false;

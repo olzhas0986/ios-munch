@@ -108,7 +108,7 @@ def audit_smp8_dtb(dtb):
     print('SMP8 topology audit passed: MPIDR 0x000..0x700 and PSCI SMC')
 
 
-def build(smp8=False):
+def build(cpu_count=1):
     # Preserve upstream's generic platform bindings, not its RAM/SoC/timer.
     mkadt.PHYS_BASE, mkadt.MEM_SIZE = BASE, SIZE
     mkadt.FB_SIZE = 0x2300000
@@ -129,11 +129,12 @@ def build(smp8=False):
             setprop(child, "name", mkadt.cstr("munch-ufs"))
     for node in root.children:
         if node.name == "cpus":
-            if not smp8:
+            if cpu_count == 1:
                 node.children = node.children[:1]
             else:
                 if len(node.children) != 8:
                     raise ValueError('mkadt did not produce eight CPU nodes')
+                node.children = node.children[:cpu_count]
                 # Not a verified heterogeneous topology for XNU yet.
                 # Label physical core IDs and keep kernel CPU0 default.
                 for core, c in enumerate(node.children):
@@ -197,6 +198,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dtb", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--smp2-preview", action="store_true",
+                        help="emit CPU0+CPU1 ADT for OFFLINE review ONLY; NOT bootable")
     parser.add_argument("--smp8-preview", action="store_true",
                         help="emit eight CPU ADT nodes for offline review; NOT a bootable SMP8 configuration")
     args = parser.parse_args()
@@ -204,12 +207,15 @@ def main():
     audit_touch(args.dtb)
     regs = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), '/soc/ufshc@1d84000', 'reg']).split()
     assert [int(v, 16) for v in regs] == [0x1d84000, 0x3000, 0x1d90000, 0x8000], "unexpected live UFS MMIO"
-    if args.smp8_preview:
+    if args.smp8_preview and args.smp2_preview:
+        parser.error("choose only one preview mode")
+    if args.smp8_preview or args.smp2_preview:
         audit_smp8_dtb(args.dtb)
-    data = build(smp8=args.smp8_preview)
+    count = 8 if args.smp8_preview else (2 if args.smp2_preview else 1)
+    data = build(cpu_count=count)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(data)
-    mode = "SMP8 ADT PREVIEW (NOT BOOT-READY)" if args.smp8_preview else "CPU0 only"
+    mode = f"SMP{count} ADT PREVIEW (NOT BOOT-READY)" if count > 1 else "CPU0 only"
     print(f"{args.output}: {len(data)} bytes, {mode}, virtual IRQ27, bounded iosroot controller node")
 
 

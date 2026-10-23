@@ -1,6 +1,6 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -45,6 +45,30 @@
+@@ -45,6 +45,32 @@
  #include <kern/clock.h>
  #include <sys/proc.h>
  
@@ -10,7 +10,9 @@
 +munch_a650_gpucc_probe(void)
 +{
 +    int enabled = 0;
-+    if (!PE_parse_boot_argn("muncha650probe", &enabled, sizeof(enabled)) || enabled != 1) {
++    const bool found = PE_parse_boot_argn("muncha650probe", &enabled, sizeof(enabled));
++    IOLog("MUNCH A650: probe entered found=%d enabled=%d\n", (int)found, enabled);
++    if (!found || enabled != 1) {
 +        return;
 +    }
 +    /* The GPU itself and GMU may be power-gated. Never read them here. */
@@ -31,11 +33,13 @@
  enum {
  	kSweetFBGetLayerDefaultSurface  = 3,
  	kSweetFBSwapBegin               = 4,
-@@ -141,6 +165,7 @@
+@@ -141,6 +165,9 @@
  		IOLog("MUNCH FB: no boot framebuffer\n");
  		return false;
  	}
++	IOLog("MUNCH A650: framebuffer ready, entering probe\n");
 +	munch_a650_gpucc_probe();
++	IOLog("MUNCH A650: probe returned\n");
  	fLock = IOLockAlloc();
  	fClients = OSArray::withCapacity(4);
  	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);

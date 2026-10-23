@@ -45,7 +45,7 @@ if [ "$mode" = smp8 ]; then
 else
     python3 ../tools/mkmunchadt.py "$live_dtb" "$out/munch.adt"
 fi
-cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1'
+cmdline='debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 ufsroot=iosroot ufsrw=1 rootrw=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 unentitled_ios_sim_launch=1 muncha650probe=1'
 if [ "$mode" = graphics ]; then cmdline+=' sweetfb_noconsole=1'; fi
 if [ "$mode" = smp8 ]; then cmdline="${cmdline/cpus=1/cpus=8}"; fi
 if [ "$mode" = profiles ]; then

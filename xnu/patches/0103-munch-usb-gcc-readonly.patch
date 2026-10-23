@@ -21,11 +21,12 @@
  
 --- /dev/null
 +++ b/bsd/dev/munch_usb_probe.c
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,43 @@
 +/* SM8250 Munch USB GCC status. No DWC3/PHY MMIO, no register writes. */
 +#if defined(ARM64_BOARD_CONFIG_SWEET)
 +#include <sys/param.h>
 +#include <sys/systm.h>
++#include <IOKit/IOLib.h>
 +#include <pexpert/pexpert.h>
 +
 +extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
@@ -41,24 +42,26 @@
 +munch_usb_probe(void)
 +{
 +    int enable = 0;
-+    if (!PE_parse_boot_argn("munchusbprobe", &enable, sizeof(enable)) || enable != 1) {
++    bool found = PE_parse_boot_argn("munchusbprobe", &enable, sizeof(enable));
++    IOLog("MUNCH USB: probe entered found=%d enabled=%d\n", (int)found, enable);
++    if (!found || enable != 1) {
 +        return;
 +    }
-+    printf("MUNCH USB: probe entered, GCC only (no USB enumeration)\n");
++    IOLog("MUNCH USB: probe entered, GCC only (no USB enumeration)\n");
 +    /* GCC_SM8250 USB30_PRIM status offsets: no access to gated DWC3. */
 +    vm_offset_t gcc = ml_io_map((vm_offset_t)0x00100000ULL, (vm_size_t)0x11000);
 +    if (gcc == 0) {
-+        printf("MUNCH USB: GCC mapping failed\n");
++        IOLog("MUNCH USB: GCC mapping failed\n");
 +        return;
 +    }
 +    uint32_t gdsc = munch_usb_rd(gcc, 0xf004);
 +    uint32_t master = munch_usb_rd(gcc, 0xf010);
 +    uint32_t sleep = munch_usb_rd(gcc, 0xf018);
 +    uint32_t utmi = munch_usb_rd(gcc, 0xf01c);
-+    printf("MUNCH USB: GDSCR=%08x MASTER=%08x SLEEP=%08x UTMI=%08x\n",
++    IOLog("MUNCH USB: GDSCR=%08x MASTER=%08x SLEEP=%08x UTMI=%08x\n",
 +        gdsc, master, sleep, utmi);
-+    printf("MUNCH USB: master_clk_off=%u sleep_clk_off=%u utmi_clk_off=%u\n",
++    IOLog("MUNCH USB: master_clk_off=%u sleep_clk_off=%u utmi_clk_off=%u\n",
 +        (master >> 31) & 1, (sleep >> 31) & 1, (utmi >> 31) & 1);
-+    printf("MUNCH USB: DWC3 0x0a600000 NOT accessed; USB CDC-ECM NOT started\n");
++    IOLog("MUNCH USB: DWC3 0x0a600000 NOT accessed; USB CDC-ECM NOT started\n");
 +}
 +#endif

@@ -109,7 +109,7 @@
 +	const ml_topology_info_t *topology = ml_get_topology_info();
 +	uint32_t requested = 1;
 +	PE_parse_boot_argn("cpus", &requested, sizeof(requested));
-+	IOLog("MUNCH CPU: requested=%u selected=%u (limit=%u)\n",
++	if (false) IOLog("MUNCH CPU: requested=%u selected=%u (limit=%u)\n",
 +	    requested, topology->num_cpus, SWEET_SMP_MAX_CPUS);
 +
 +	uint64_t deadline;
@@ -146,7 +146,7 @@
 +			}
 +			IOSleep(1);
 +		}
-+		IOLog("MUNCH CPU: cpu=%u mpidr=0x%x came alive; SGI1 OK\n",
++		if (false) IOLog("MUNCH CPU: cpu=%u mpidr=0x%x came alive; SGI1 OK\n",
 +		    i, topology->cpus[i].phys_id);
 +	}
 +	/* Publish exactly once, after every selected CPU has completed initCPU(). */
@@ -193,7 +193,7 @@
 -		__asm__ volatile("yield");
 -	}
  	setCPUState(kIOCPUStateRunning);
-+	kprintf("MUNCH CPU: cpu=%u entered initCPU mpidr=0x%llx EL%llu IRQs=%u\n",
++	if (false) kprintf("MUNCH CPU: cpu=%u entered initCPU mpidr=0x%llx EL%llu IRQs=%u\n",
 +	    getCPUNumber(), __builtin_arm_rsr64("MPIDR_EL1") & 0xffffULL,
 +	    __builtin_arm_rsr64("CurrentEL") >> 2, ml_get_interrupts_enabled());
 +	__atomic_store_n(&initialized, 1, __ATOMIC_RELEASE);
@@ -233,11 +233,11 @@
 +		panic("MUNCH CPU: cpu=%u unsupported restart", getCPUNumber());
 +	}
 +	vm_offset_t entry = ml_static_vtop((vm_offset_t)&sweet_secondary_entry);
-+	IOLog("MUNCH CPU: cpu=%u CPU_ON target=0x%x entry_pa=0x%llx context=%u\n",
++	if (false) IOLog("MUNCH CPU: cpu=%u CPU_ON target=0x%x entry_pa=0x%llx context=%u\n",
 +	    getCPUNumber(), cpu->phys_id, (uint64_t)entry, getCPUNumber());
 +	__builtin_arm_dsb(DSB_SY);
 +	int32_t rc = sweet_psci_cpu_on(cpu->phys_id, entry, getCPUNumber());
-+	IOLog("MUNCH CPU: cpu=%u PSCI CPU_ON rc=%d\n", getCPUNumber(), rc);
++	if (false) IOLog("MUNCH CPU: cpu=%u PSCI CPU_ON rc=%d\n", getCPUNumber(), rc);
 +	/* cpu_start() discards PE_cpu_start's return; do not silently carry on. */
 +	if (rc != 0) {
 +		panic("MUNCH CPU: cpu=%u NOT alive: PSCI CPU_ON rc=%d", getCPUNumber(), rc);

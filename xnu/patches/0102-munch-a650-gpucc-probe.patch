@@ -1,0 +1,41 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -45,6 +45,30 @@
+ #include <kern/clock.h>
+ #include <sys/proc.h>
+ 
++/* A650/Kona stage 2: opt-in GPUCC register survey. No register writes. */
++extern "C" vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++static void
++munch_a650_gpucc_probe(void)
++{
++    int enabled = 0;
++    if (!PE_parse_boot_argn("muncha650probe", &enabled, sizeof(enabled)) || enabled != 1) {
++        return;
++    }
++    /* The GPU itself and GMU may be power-gated. Never read them here. */
++    const vm_offset_t gpucc = ml_io_map((vm_offset_t)0x03d90000ULL, (vm_size_t)0x1000);
++    if (!gpucc) {
++        IOLog("MUNCH A650: GPUCC mapping failed at 0x03d90000\n");
++        return;
++    }
++    volatile const uint32_t *regs = (volatile const uint32_t *)gpucc;
++    const uint32_t raw0 = regs[0];
++    const uint32_t raw4 = regs[1];
++    __asm__ volatile("dmb oshld" ::: "memory");
++    IOLog("MUNCH A650: GPUCC raw offset 0x000=0x%08x 0x004=0x%08x (no writes)\n",
++        raw0, raw4);
++    IOLog("MUNCH A650: KGSL 0x03d00000 GMU 0x03d6a000 NOT ACCESSED; powered state unknown\n");
++}
++
+ enum {
+ 	kSweetFBGetLayerDefaultSurface  = 3,
+ 	kSweetFBSwapBegin               = 4,
+@@ -141,6 +165,7 @@
+ 		IOLog("MUNCH FB: no boot framebuffer\n");
+ 		return false;
+ 	}
++	munch_a650_gpucc_probe();
+ 	fLock = IOLockAlloc();
+ 	fClients = OSArray::withCapacity(4);
+ 	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);

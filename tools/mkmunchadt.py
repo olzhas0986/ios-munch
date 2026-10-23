@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build CPU0-only XNU ADT with bounded Munch iosroot support after checking munch live FDT RAM.
+"""Build opt-in SMP8-preview or CPU0-only XNU ADT with bounded Munch iosroot support after checking munch live FDT RAM.
 
 Usage: python3 tools/mkmunchadt.py LIVE.dtb OUT.adt
 Requires fdtget (dtc package). Does not read/write a connected phone.
@@ -92,7 +92,23 @@ def setprop(node, name, data):
     node.props = [(n, f, v) for n, f, v in node.props if n != name] + [(name, 0, data)]
 
 
-def build():
+def audit_smp8_dtb(dtb):
+    """Refuse unknown processor topology rather than guessing core IDs."""
+    for core in range(8):
+        node = '/cpus/cpu@' + format(core << 8, 'x')
+        reg = cells(dtb, node, 'reg')
+        if reg != [0, core << 8]:
+            raise ValueError(f'{node}: unexpected MPIDR cells {reg}')
+        proc = subprocess.check_output(['fdtget', '-t', 's', str(dtb), node, 'enable-method'], text=True).strip()
+        if proc != 'psci':
+            raise ValueError(f'{node}: expected PSCI, got {proc}')
+    method = subprocess.check_output(['fdtget', '-t', 's', str(dtb), '/psci', 'method'], text=True).strip()
+    if method != 'smc':
+        raise ValueError(f'PSCI method {method} != smc')
+    print('SMP8 topology audit passed: MPIDR 0x000..0x700 and PSCI SMC')
+
+
+def build(smp8=False):
     # Preserve upstream's generic platform bindings, not its RAM/SoC/timer.
     mkadt.PHYS_BASE, mkadt.MEM_SIZE = BASE, SIZE
     mkadt.FB_SIZE = 0x2300000
@@ -113,7 +129,17 @@ def build():
             setprop(child, "name", mkadt.cstr("munch-ufs"))
     for node in root.children:
         if node.name == "cpus":
-            node.children = node.children[:1]
+            if not smp8:
+                node.children = node.children[:1]
+            else:
+                if len(node.children) != 8:
+                    raise ValueError('mkadt did not produce eight CPU nodes')
+                # Not a verified heterogeneous topology for XNU yet.
+                # Label physical core IDs and keep kernel CPU0 default.
+                for core, c in enumerate(node.children):
+                    setprop(c, 'reg', mkadt.u32(core << 8))
+                    setprop(c, 'cpu-id', mkadt.u32(core))
+                    setprop(c, 'state', mkadt.cstr('running' if core == 0 else 'stopped'))
             # The current generic IOCPU driver matches this legacy alias.
             # Keep the munch CPU identity first, as with the root PE alias.
             setprop(node.children[0], "compatible",
@@ -171,15 +197,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dtb", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--smp8-preview", action="store_true",
+                        help="emit eight CPU ADT nodes for offline review; NOT a bootable SMP8 configuration")
     args = parser.parse_args()
     audit(args.dtb)
     audit_touch(args.dtb)
     regs = subprocess.check_output(['fdtget', '-t', 'x', str(args.dtb), '/soc/ufshc@1d84000', 'reg']).split()
     assert [int(v, 16) for v in regs] == [0x1d84000, 0x3000, 0x1d90000, 0x8000], "unexpected live UFS MMIO"
-    data = build()
+    if args.smp8_preview:
+        audit_smp8_dtb(args.dtb)
+    data = build(smp8=args.smp8_preview)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(data)
-    print(f"{args.output}: {len(data)} bytes, CPU0 only, virtual IRQ27, bounded iosroot controller node")
+    mode = "SMP8 ADT PREVIEW (NOT BOOT-READY)" if args.smp8_preview else "CPU0 only"
+    print(f"{args.output}: {len(data)} bytes, {mode}, virtual IRQ27, bounded iosroot controller node")
 
 
 if __name__ == "__main__":

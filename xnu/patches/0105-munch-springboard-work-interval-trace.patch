@@ -1,0 +1,104 @@
+--- a/bsd/kern/sys_work_interval.c
++++ b/bsd/kern/sys_work_interval.c
+@@ -35,10 +35,11 @@
+ #include <kern/thread.h>
+ #include <kern/task.h>
+ #include <kern/work_interval.h>
+ 
+ #include <libkern/libkern.h>
++#include <sys/proc_internal.h>
+ 
+ int
+ work_interval_ctl(__unused proc_t p, struct work_interval_ctl_args *uap,
+     __unused int32_t *retval)
+ {
+@@ -51,36 +52,59 @@
+ 	struct kern_work_interval_create_args create_args;
+ 	struct work_interval_workload_id_params workload_id_params;
+ 	struct kern_work_interval_workload_id_args workload_id_args;
+ 	mach_port_name_t port_name;
+ 
+-	switch (operation) {
++	        /* Munch: trace work interval failures for SpringBoard only. */
++	        const bool munch_wi_trace = p != NULL &&
++	            strcmp(p->p_comm, "SpringBoard") == 0;
++	        if (munch_wi_trace && operation == WORK_INTERVAL_OPERATION_CREATE2) {
++	                printf("MUNCH WI: SpringBoard CREATE2 len=%llu id=0x%llx\n",
++	                    (unsigned long long)uap->len,
++	                    (unsigned long long)uap->work_interval_id);
++	        }
++	
++	        switch (operation) {
+ 	case WORK_INTERVAL_OPERATION_CREATE:
+ 		return ENOTSUP;
+ 	case WORK_INTERVAL_OPERATION_CREATE2:
+ 		if (uap->arg == USER_ADDR_NULL || uap->work_interval_id != 0) {
+ 			return EINVAL;
+ 		}
+ 		if (uap->len < sizeof(create_params)) {
+ 			return EINVAL;
+ 		}
+ 
+-		if ((error = copyin(uap->arg, &create_params, sizeof(create_params)))) {
+-			return error;
+-		}
+-
+-		if ((error = priv_check_cred(kauth_cred_get(), PRIV_WORK_INTERVAL, 0)) != 0) {
+-			return error;
+-		}
++		                if ((error = copyin(uap->arg, &create_params, sizeof(create_params)))) {
++                        if (munch_wi_trace) printf("MUNCH WI: CREATE2 copyin errno=%d\n", error);
++                        return error;
++                }
++                if (munch_wi_trace) {
++                        printf("MUNCH WI: CREATE2 flags=0x%x input_id=0x%llx\n",
++                            create_params.wicp_create_flags,
++                            (unsigned long long)create_params.wicp_id);
++                }
++
++                if ((error = priv_check_cred(kauth_cred_get(), PRIV_WORK_INTERVAL, 0)) != 0) {
++                        if (munch_wi_trace) printf("MUNCH WI: privilege errno=%d\n", error);
++                        return error;
++                }
++                if (munch_wi_trace) printf("MUNCH WI: privilege OK\n");
+ 
+ 		create_args = (struct kern_work_interval_create_args) {
+ 			.wica_id            = create_params.wicp_id,
+ 			.wica_port          = create_params.wicp_port,
+ 			.wica_create_flags  = create_params.wicp_create_flags,
+ 		};
+ 
+-		kret = kern_work_interval_create(current_thread(), &create_args);
++		                kret = kern_work_interval_create(current_thread(), &create_args);
++                if (munch_wi_trace) {
++                        printf("MUNCH WI: create kret=%d flags=0x%x output_id=0x%llx\n",
++                            (int)kret, create_args.wica_create_flags,
++                            (unsigned long long)create_args.wica_id);
++                }
++
+ 
+ 		/* thread already has a work interval */
+ 		if (kret == KERN_FAILURE) {
+ 			return EALREADY;
+ 		}
+@@ -99,14 +123,16 @@
+ 			.wicp_id = create_args.wica_id,
+ 			.wicp_port = create_args.wica_port,
+ 			.wicp_create_flags = create_args.wica_create_flags,
+ 		};
+ 
+-		if ((error = copyout(&create_params, uap->arg, sizeof(create_params)))) {
+-			kern_work_interval_destroy(current_thread(), create_args.wica_id);
+-			return error;
+-		}
++		                if ((error = copyout(&create_params, uap->arg, sizeof(create_params)))) {
++                        if (munch_wi_trace) printf("MUNCH WI: CREATE2 copyout errno=%d\n", error);
++                        kern_work_interval_destroy(current_thread(), create_args.wica_id);
++                        return error;
++                }
++                if (munch_wi_trace) printf("MUNCH WI: CREATE2 success\n");
+ 		break;
+ 	case WORK_INTERVAL_OPERATION_GET_FLAGS:
+ 		if (uap->arg == USER_ADDR_NULL || uap->len < sizeof(create_params)) {
+ 			return EINVAL;
+ 		}

@@ -790,7 +790,7 @@
 +		return;
 +	}
 +	ud.dma_pa = ptoa_64(pn);
-+	ud_if_create();
++	/* ud_if_create(); */ /* TEMP: diagnose early network init */
 +
 +	/* Device controller soft reset (PHY and global setup stay as ABL left them). */
 +	dwc_wr(DCTL, DCTL_CSFTRST);

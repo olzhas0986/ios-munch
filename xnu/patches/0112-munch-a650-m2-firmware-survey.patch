@@ -1,0 +1,25 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -139,8 +139,22 @@
+                     IOLog("MUNCH GPU M1: AFTER %s value=0x%08x\n",
+                         name, value);
+                 }
+             }
++            int m2_enabled = 0;
++            if (PE_parse_boot_argn("munchgpu_m2",
++                &m2_enabled, sizeof(m2_enabled)) && m2_enabled == 1) {
++                IOLog("MUNCH GPU M2: begin firmware/power dependency survey\n");
++                IOLog("MUNCH GPU M2: reference device Munch SM8250 Adreno 650\n");
++                IOLog("MUNCH GPU M2: DT GPUCC=0x03d90000 GMU=0x03d6a000\n");
++                IOLog("MUNCH GPU M2: DT SMMU=0x03da0000 RSCC=0x03de0000\n");
++                IOLog("MUNCH GPU M2: DT regulators cx.lvl mx.lvl gfx.lvl\n");
++                IOLog("MUNCH GPU M2: DT GMU clocks gmu cxo axi memnoc ahb apb\n");
++                IOLog("MUNCH GPU M2: DT ZAP=a650_zap PAS=13\n");
++                IOLog("MUNCH GPU M2: firmware not loaded or validated by XNU\n");
++                IOLog("MUNCH GPU M2: no RPMh votes, SMC or hardware writes\n");
++                IOLog("MUNCH GPU M2: end\n");
++            }
+             IOLog("MUNCH GPU M1: end; zero writes\n");
+         }
+         IOLog("MUNCH GPU M0: end; no GPU writes\n");
+     }

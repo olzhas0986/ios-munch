@@ -1,0 +1,52 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -75,11 +75,11 @@
+     IOLog("MUNCH A650: GPUCC CX_GDSCR[106c]=0x%08x GX_GDSCR[100c]=0x%08x\n", cx, gx);
+     IOLog("MUNCH A650: CX pwr_on=%u GX pwr_on=%u (bit31; snapshot only)\n",
+         (cx >> 31) & 1u, (gx >> 31) & 1u);
+     /* MUNCH GPU M0: opt-in read-only survey. */
+     int munchgpu = 0;
+-    if (PE_parse_boot_argn("munchgpu", &munchgpu, sizeof(munchgpu)) && munchgpu == 1) {
++    if (PE_parse_boot_argn("munchgpu", &munchgpu, sizeof(munchgpu)) && (munchgpu == 1 || munchgpu == 2)) {
+         IOLog("MUNCH GPU M0: begin; GPUCC read-only\n");
+         IOLog("MUNCH GPU M0: DT chipid=0x06050002 GPUCC=0x03d90000\n");
+         IOLog("MUNCH GPU M0: KGSL=0x03d00000 GMU=0x03d6a000 SMMU=0x03da0000 RSCC=0x03de0000 (not accessed)\n");
+ 
+         const uint32_t cx_m0 =
+@@ -94,10 +94,36 @@
+ 
+         IOLog("MUNCH GPU M0: CX bit31=%u bit0=%u GX bit31=%u bit0=%u\n",
+             (cx_m0 >> 31) & 1u, cx_m0 & 1u,
+             (gx_m0 >> 31) & 1u, gx_m0 & 1u);
+ 
++        /*
++         * MUNCH M1 preflight.
++         * GPUCC registers only; never write hardware.
++         * No GPU/GMU/SMMU/RPMh access.
++         */
++        if (munchgpu == 2) {
++            IOLog("MUNCH GPU M1: begin read-only preflight\n");
++            const uint32_t cx_hw =
++                *(volatile const uint32_t *)(gpucc + 0x1540);
++            const uint32_t ahb =
++                *(volatile const uint32_t *)(gpucc + 0x1078);
++            const uint32_t cx_gmu =
++                *(volatile const uint32_t *)(gpucc + 0x1098);
++            const uint32_t smmu_vote =
++                *(volatile const uint32_t *)(gpucc + 0x5000);
++            __asm__ volatile("dmb oshld" ::: "memory");
++            IOLog("MUNCH GPU M1: CX HW_CTRL[1540]=0x%08x\n",
++                cx_hw);
++            IOLog("MUNCH GPU M1: AHB_CBCR[1078]=0x%08x\n",
++                ahb);
++            IOLog("MUNCH GPU M1: CX_GMU_CBCR[1098]=0x%08x\n",
++                cx_gmu);
++            IOLog("MUNCH GPU M1: SMMU_VOTE[5000]=0x%08x\n",
++                smmu_vote);
++            IOLog("MUNCH GPU M1: end, ZERO hardware writes\n");
++        }
+         IOLog("MUNCH GPU M0: end; no GPU writes\n");
+     }
+     IOLog("MUNCH A650: KGSL 0x03d00000 GMU 0x03d6a000 NOT ACCESSED; powered state unknown\n");
+ }
+ 

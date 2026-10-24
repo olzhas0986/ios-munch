@@ -1,0 +1,2 @@
+
+xnu/patches/*.patch -whitespace

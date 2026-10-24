@@ -1,0 +1,69 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -101,27 +101,47 @@
+          * GPUCC registers only; never write hardware.
+          * No GPU/GMU/SMMU/RPMh access.
+          */
+         if (munchgpu == 2) {
+-            IOLog("MUNCH GPU M1: begin read-only preflight\n");
+-            const uint32_t cx_hw =
+-                *(volatile const uint32_t *)(gpucc + 0x1540);
+-            const uint32_t ahb =
+-                *(volatile const uint32_t *)(gpucc + 0x1078);
+-            const uint32_t cx_gmu =
+-                *(volatile const uint32_t *)(gpucc + 0x1098);
+-            const uint32_t smmu_vote =
+-                *(volatile const uint32_t *)(gpucc + 0x5000);
+-            __asm__ volatile("dmb oshld" ::: "memory");
+-            IOLog("MUNCH GPU M1: CX HW_CTRL[1540]=0x%08x\n",
+-                cx_hw);
+-            IOLog("MUNCH GPU M1: AHB_CBCR[1078]=0x%08x\n",
+-                ahb);
+-            IOLog("MUNCH GPU M1: CX_GMU_CBCR[1098]=0x%08x\n",
+-                cx_gmu);
+-            IOLog("MUNCH GPU M1: SMMU_VOTE[5000]=0x%08x\n",
+-                smmu_vote);
+-            IOLog("MUNCH GPU M1: end, ZERO hardware writes\n");
++            int reg_id = 0;
++            const bool selected = PE_parse_boot_argn(
++                "munchgpu_reg", &reg_id, sizeof(reg_id));
++            IOLog("MUNCH GPU M1: map_size=0x2000 selected=%u reg_id=%d\n",
++                (unsigned)selected, reg_id);
++            uint32_t offset = 0;
++            const char *name = "none";
++            switch (reg_id) {
++            case 1:
++                offset = 0x1540;
++                name = "CX_HW_CTRL";
++                break;
++            case 2:
++                offset = 0x1078;
++                name = "GPUCC_1078";
++                break;
++            case 3:
++                offset = 0x1098;
++                name = "GPUCC_1098";
++                break;
++            default:
++                IOLog("MUNCH GPU M1: no register selected\n");
++                break;
++            }
++            if (selected && offset != 0) {
++                if (offset > 0x2000u - sizeof(uint32_t)) {
++                    IOLog("MUNCH GPU M1: offset outside mapping\n");
++                } else {
++                    IOLog("MUNCH GPU M1: BEFORE %s offset=0x%x va=%p\n",
++                        name, offset, (void *)(gpucc + offset));
++                    __asm__ volatile("dsb sy" ::: "memory");
++                    const uint32_t value =
++                        *(volatile const uint32_t *)(gpucc + offset);
++                    __asm__ volatile("dsb sy" ::: "memory");
++                    IOLog("MUNCH GPU M1: AFTER %s value=0x%08x\n",
++                        name, value);
++                }
++            }
++            IOLog("MUNCH GPU M1: end; zero writes\n");
+         }
+         IOLog("MUNCH GPU M0: end; no GPU writes\n");
+     }
+     IOLog("MUNCH A650: KGSL 0x03d00000 GMU 0x03d6a000 NOT ACCESSED; powered state unknown\n");

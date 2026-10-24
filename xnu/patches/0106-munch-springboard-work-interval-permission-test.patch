@@ -1,0 +1,38 @@
+--- a/bsd/kern/sys_work_interval.c
++++ b/bsd/kern/sys_work_interval.c
+@@ -36,10 +36,11 @@
+ #include <kern/task.h>
+ #include <kern/work_interval.h>
+ 
+ #include <libkern/libkern.h>
+ #include <sys/proc_internal.h>
++#include <pexpert/pexpert.h>
+ 
+ int
+ work_interval_ctl(__unused proc_t p, struct work_interval_ctl_args *uap,
+     __unused int32_t *retval)
+ {
+@@ -83,12 +84,21 @@
+                             create_params.wicp_create_flags,
+                             (unsigned long long)create_params.wicp_id);
+                 }
+ 
+                 if ((error = priv_check_cred(kauth_cred_get(), PRIV_WORK_INTERVAL, 0)) != 0) {
+-                        if (munch_wi_trace) printf("MUNCH WI: privilege errno=%d\n", error);
+-                        return error;
++                	int munch_wi_allow = 0;
++                	if (munch_wi_trace && error == EPERM &&
++                	    create_params.wicp_create_flags == 0x30000000u &&
++                	    PE_parse_boot_argn("munchwiallow", &munch_wi_allow, sizeof(munch_wi_allow)) &&
++                	    munch_wi_allow == 1) {
++                		printf("MUNCH WI: experimental SpringBoard privilege bypass flags=0x%x\n",
++                		    create_params.wicp_create_flags);
++                	} else {
++                		if (munch_wi_trace) printf("MUNCH WI: privilege errno=%d\n", error);
++                		return error;
++                	}
+                 }
+                 if (munch_wi_trace) printf("MUNCH WI: privilege OK\n");
+ 
+ 		create_args = (struct kern_work_interval_create_args) {
+ 			.wica_id            = create_params.wicp_id,

@@ -26,7 +26,7 @@ ADT and boot_args, inside topOfKernelData (never handed to the VM), and the
 ADT gets /chosen/memory-map "RAMDisk" = <phys, size> for IOFindBSDRoot to
 turn into md0 (boot with rd=md0).
 """
-import argparse, os, struct, sys
+import argparse, os, struct, sys, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adt  # noqa: E402
@@ -132,6 +132,20 @@ def add_ramdisk_to_adt(adt_blob, phys, size):
     return adt.serialize(root)
 
 
+
+def add_gmu_firmware_to_adt(adt_blob, phys, size):
+    """Expose original A650 firmware as a reserved boot payload segment."""
+    root, _ = adt.parse(adt_blob)
+    chosen = next(c for c in root.children if c.name == 'chosen')
+    mmap = next(c for c in chosen.children if c.name == 'memory-map')
+    assert mmap.prop('A650GMUFirmware') is None
+    mmap.props.append((
+        'A650GMUFirmware', 0,
+        struct.pack('<2Q', phys, size)
+    ))
+    return adt.serialize(root)
+
+
 def adt_dram(adt_blob):
     """Kernel-managed RAM <base, size> from the ADT's /chosen dram-base/dram-size."""
     root, _ = adt.parse(adt_blob)
@@ -140,7 +154,7 @@ def adt_dram(adt_blob):
             struct.unpack('<Q', chosen.prop('dram-size'))[0])
 
 
-def build(kernel_path, adt_path, cmdline, ramdisk_path=None):
+def build(kernel_path, adt_path, cmdline, ramdisk_path=None, gmu_fw_path=None):
     buf = bytearray(open(kernel_path, 'rb').read())
     m = parse_macho(buf)
     nfix = apply_chained_fixups(buf, m)
@@ -168,6 +182,24 @@ def build(kernel_path, adt_path, cmdline, ramdisk_path=None):
         adt_blob = add_ramdisk_to_adt(adt_blob, rd_pa, rd_size)
         ramdisk = (hex(rd_pa), hex(rd_size))
 
+    if gmu_fw_path:
+        fw = open(gmu_fw_path, 'rb').read()
+        assert len(fw) == 41548, 'unexpected A650 GMU firmware size'
+        assert hashlib.sha256(fw).hexdigest() == 'df79fa8482fcc7587bb239b9c9e2b24bce4729893b990fe3f82b30da8175b01c', (
+            'A650 GMU firmware SHA256 mismatch'
+        )
+        fw_va = kernel_end
+        fw_pa = fw_va - virt_base + PHYS_BASE
+        fw_span = (len(fw) + PAGE - 1) & ~(PAGE - 1)
+        pieces.append((fw_va, fw_span, fw))
+        kernel_end += fw_span
+        adt_blob = add_gmu_firmware_to_adt(
+            adt_blob, fw_pa, len(fw)
+        )
+        print('A650 GMU firmware packed:',
+              hex(fw_pa), len(fw), 'bytes')
+
+    assert len(pieces) <= 32, 'loader supports at most 32 segments'
     hdr_size = SEG_TABLE + 32 * len(pieces)
     out = bytearray(hdr_size)
     seg_table = []
@@ -198,8 +230,9 @@ if __name__ == '__main__':
     ap.add_argument('kernel'); ap.add_argument('adt'); ap.add_argument('out')
     ap.add_argument('--cmdline', default='debug=0xc serial=3 cpus=1 keepsyms=1')
     ap.add_argument('--ramdisk', help='root image for md0 (boot with rd=md0)')
+    ap.add_argument('--gmu-fw', help='verified A650 GMU firmware')
     a = ap.parse_args()
-    blob, info = build(a.kernel, a.adt, a.cmdline, a.ramdisk)
+    blob, info = build(a.kernel, a.adt, a.cmdline, a.ramdisk, a.gmu_fw)
     open(a.out, 'wb').write(blob)
     for k, v in info.items():
         if k != 'segs':

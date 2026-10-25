@@ -1,0 +1,170 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -41,13 +41,156 @@
+ #include <IOKit/IOWorkLoop.h>
+ #include <IOKit/IOTimerEventSource.h>
+ #include <IOKit/system.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/device_tree.h>
+ #include <kern/clock.h>
+ #include <sys/proc.h>
+ 
+ /* A650/Kona stage 2: opt-in GPUCC register survey. No register writes. */
+ extern "C" vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern "C" vm_offset_t ml_static_ptovirt(vm_offset_t);
++
++/*
++ * MUNCH A650 M3: parse original Qualcomm GMU firmware from boot ADT.
++ * Read-only: no registers, no RPMh, no IOMMU programming.
++ */
++static void
++munch_a650_gmu_firmware_probe(void)
++{
++    int enabled = 0;
++    if (!PE_parse_boot_argn("munchgmu", &enabled,
++            sizeof(enabled)) || enabled != 1) {
++        return;
++    }
++
++    IOLog("MUNCH GMU M3: begin firmware parser\n");
++
++    DTEntry entry = NULL;
++    const void *property = NULL;
++    unsigned int property_size = 0;
++
++    if (SecureDTLookupEntry(NULL, "/chosen/memory-map",
++            &entry) != kSuccess ||
++        SecureDTGetProperty(entry, "A650GMUFirmware",
++            &property, &property_size) != kSuccess ||
++        property_size != 16 || !property) {
++        IOLog("MUNCH GMU M3: missing firmware ADT handoff\n");
++        return;
++    }
++
++    const uint64_t *handoff = (const uint64_t *)property;
++    const uint64_t pa = handoff[0];
++    const uint64_t length = handoff[1];
++
++    /* Bounded 4..8 GiB Munch kernel-managed DRAM aperture. */
++    if (length != 41548 ||
++        pa < 0x100000000ULL ||
++        pa >= 0x200000000ULL ||
++        length > 0x200000000ULL - pa) {
++        IOLog("MUNCH GMU M3: rejected address/length\n");
++        return;
++    }
++
++    const vm_offset_t va =
++        ml_static_ptovirt((vm_offset_t)pa);
++    if (!va) {
++        IOLog("MUNCH GMU M3: phys-to-virt failed\n");
++        return;
++    }
++
++    const uint8_t *fw = (const uint8_t *)va;
++
++    /* Calculate FNV-1a over actual firmware bytes. */
++    uint64_t fingerprint = 0xcbf29ce484222325ULL;
++    for (uint64_t i = 0; i < length; ++i) {
++        fingerprint ^= fw[i];
++        fingerprint *= 0x100000001b3ULL;
++    }
++
++    unsigned int blocks = 0;
++    unsigned int metadata = 0;
++    unsigned int itcm = 0;
++    unsigned int dtcm = 0;
++    unsigned int icache = 0;
++    uint64_t offset = 0;
++
++    while (offset < length) {
++        if (length - offset < 16 || blocks >= 32) {
++            IOLog("MUNCH GMU M3: invalid header/count\n");
++            return;
++        }
++
++        const uint8_t *p = fw + offset;
++        uint32_t word[4] = {0, 0, 0, 0};
++
++        /* Unaligned-safe little-endian header decoding. */
++        for (unsigned int j = 0; j < 4; ++j) {
++            for (unsigned int k = 0; k < 4; ++k) {
++                word[j] |= ((uint32_t)p[j * 4 + k]) << (k * 8);
++            }
++        }
++
++        const uint64_t addr = word[0];
++        const uint64_t size = word[1];
++        const uint32_t type = word[2];
++        const uint64_t next = offset + 16 + size;
++
++        if (next > length) {
++            IOLog("MUNCH GMU M3: truncated payload\n");
++            return;
++        }
++
++        if (!size) {
++            if (type != 1) {
++                IOLog("MUNCH GMU M3: unexpected metadata type\n");
++                return;
++            }
++            metadata++;
++        } else {
++            if (type != 0xefbeaddeU) {
++                IOLog("MUNCH GMU M3: unexpected payload type\n");
++                return;
++            }
++
++            /* Check destination ranges before classification. */
++            if (addr < 0x4000ULL &&
++                size <= 0x4000ULL - addr) {
++                itcm++;
++            } else if (addr >= 0x10004000ULL &&
++                addr < 0x10008000ULL &&
++                size <= 0x10008000ULL - addr) {
++                dtcm++;
++            } else if (addr >= 0x4000ULL &&
++                addr < 0x1000000ULL &&
++                size <= 0x1000000ULL - addr) {
++                icache++;
++            } else {
++                IOLog("MUNCH GMU M3: unknown destination\n");
++                return;
++            }
++        }
++
++        blocks++;
++        offset = next;
++    }
++
++    if (offset != length ||
++        blocks != 16 || metadata != 9 ||
++        itcm != 3 || dtcm != 2 || icache != 2) {
++        IOLog("MUNCH GMU M3: unexpected firmware layout\n");
++        return;
++    }
++
++    IOLog("MUNCH GMU M3: firmware received %llu bytes\n",
++          (unsigned long long)length);
++    IOLog("MUNCH GMU M3: FNV64=0x%016llx\n",
++          (unsigned long long)fingerprint);
++    IOLog("MUNCH GMU M3: blocks=%u metadata=%u ITCM=%u DTCM=%u ICACHE=%u\n",
++          blocks, metadata, itcm, dtcm, icache);
++    IOLog("MUNCH GMU M3: parse PASS; no GPU hardware writes\n");
++}
++
+ static void
+ munch_a650_gpucc_probe(void)
+ {
+     int enabled = 0;
+@@ -55,8 +198,10 @@
+     IOLog("MUNCH A650: probe entered found=%d enabled=%d\n", (int)found, enabled);
+     if (!found || enabled != 1) {
+         return;
+     }
++    munch_a650_gmu_firmware_probe();
++
+     /* The GPU itself and GMU may be power-gated. Never read them here. */
+     const vm_offset_t gpucc = ml_io_map((vm_offset_t)0x03d90000ULL, (vm_size_t)0x2000);
+     if (!gpucc) {
+         IOLog("MUNCH A650: GPUCC mapping failed at 0x03d90000\n");
